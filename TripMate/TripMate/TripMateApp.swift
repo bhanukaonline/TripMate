@@ -11,7 +11,7 @@ import SwiftUI
 struct TripMateApp: App {
     var body: some Scene {
         WindowGroup {
-            HomePage()
+            MainView()
         }
     }
 }

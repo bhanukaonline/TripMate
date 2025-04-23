@@ -7,6 +7,14 @@
 
 import SwiftUI
 
+enum Tab {
+    case home, trips, addtrip, map, discover
+}
+
+class TabRouter: ObservableObject {
+    @Published var currentTab: Tab = .home
+}
+
 struct HeaderView<Leading: View, Trailing: View>: View {
     let title: String
     var leading: () -> Leading
@@ -23,20 +31,18 @@ struct HeaderView<Leading: View, Trailing: View>: View {
     }
 
     var body: some View {
-        HStack {
-            leading()
-                .frame(width: 44, alignment: .leading)
-
-            Spacer()
+        ZStack {
+            HStack {
+                leading()
+                Spacer()
+                trailing()
+            }
 
             Text(title)
                 .font(.title)
                 .lineLimit(1)
-
-            Spacer()
-
-            trailing()
-                .frame(width: 44, alignment: .trailing)
+                .frame(maxWidth: .infinity)
+                .multilineTextAlignment(.center)
         }
         .padding()
         .background(Color(hex: "#00485C"))
@@ -45,21 +51,56 @@ struct HeaderView<Leading: View, Trailing: View>: View {
 }
 
 
-struct CustomTabBar: View {
-    @Binding var selectedIndex: Int
 
-    let icons = ["house", "briefcase", "plus.square", "map", "safari"]
+//struct CustomTabBar: View {
+//    @Binding var selectedIndex: Int
+//
+//    let icons = ["house", "briefcase", "plus.square", "map", "safari"]
+//
+//    var body: some View {
+//        HStack {
+//            ForEach(0..<icons.count, id: \.self) { index in
+//                Spacer()
+//                Button(action: {
+//                    selectedIndex = index
+//                }) {
+//                    Image(systemName: selectedIndex == index ? "\(icons[index]).fill" : icons[index])
+//                                            .font(.system(size: index == 2 ? 32 : 25)) // Bigger plus icon
+//                                            .foregroundColor(.white) // Keep same color, just change filled style
+//                }
+//                Spacer()
+//            }
+//        }
+//        .padding()
+//        .background(Color(Color(hex: "#383838")).shadow(radius: 5))
+//    }
+//}
+
+
+
+
+struct CustomTabBar: View {
+    @EnvironmentObject var router: TabRouter
+
+    let icons: [(image: String, tab: Tab)] = [
+        ("house", .home),
+        ("briefcase", .trips),
+        ("plus.square", .addtrip),
+        ("map", .map),
+        ("safari", .discover)
+    ]
 
     var body: some View {
         HStack {
-            ForEach(0..<icons.count, id: \.self) { index in
+            ForEach(icons, id: \.tab) { icon in
                 Spacer()
                 Button(action: {
-                    selectedIndex = index
+                    router.currentTab = icon.tab
                 }) {
-                    Image(systemName: selectedIndex == index ? "\(icons[index]).fill" : icons[index])
-                                            .font(.system(size: index == 2 ? 32 : 25)) // Bigger plus icon
-                                            .foregroundColor(.white) // Keep same color, just change filled style
+                    Image(systemName: router.currentTab == icon.tab ? "\(icon.image).fill" : icon.image)
+//                        .font(.system(size: 24))
+                        .font(.system(size: icon.tab == .addtrip ? 32 : 24))
+                        .foregroundColor(.white)
                 }
                 Spacer()
             }
