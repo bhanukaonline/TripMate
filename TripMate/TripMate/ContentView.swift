@@ -17,7 +17,11 @@ import SwiftUI
 //        }
 //        .padding()
 //    }
-//}
+
+class TripStore: ObservableObject {
+    @Published var trips: [Trip] = []
+}
+
 struct HomePage: View {
     @EnvironmentObject var router: TabRouter
 
@@ -56,6 +60,7 @@ struct HomePage: View {
 }
 struct TripsPage: View {
     @EnvironmentObject var router: TabRouter
+    @EnvironmentObject var tripStore: TripStore
 
     var body: some View {
         VStack(spacing: 0) {
@@ -74,14 +79,14 @@ struct TripsPage: View {
                            }
                        })
 
-            VStack {
-                Spacer()
-                Text("list of trips")
-                    .padding()
-                    .foregroundColor(.white)
-                Spacer()
+            ScrollView {
+                VStack(spacing: 16) {
+                    ForEach(tripStore.trips) { trip in
+                        TripCardView(trip: trip)
+                    }
+                }
+                .padding()
             }
-            .frame(maxWidth: .infinity)
             .background(Color(hex: "#383838"))
             .clipShape(RoundedCorner(radius: 25, corners: [.topLeft, .topRight]))
 
@@ -91,6 +96,7 @@ struct TripsPage: View {
         .edgesIgnoringSafeArea(.bottom)
     }
 }
+
 
 
 
@@ -136,113 +142,119 @@ struct ImagePicker: UIViewControllerRepresentable {
 
 
 
-struct AddTripPage: View {
-    @EnvironmentObject var router: TabRouter
+//struct AddTripPage: View {
+//    @EnvironmentObject var router: TabRouter
+//    @EnvironmentObject var tripStore: TripStore
+//
+//    @State private var tripName = ""
+//    @State private var startDate = Date()
+//    @State private var endDate = Date()
+//    @State private var budgetText = ""
+//    @State private var selectedImage: UIImage?
+//    @State private var showImagePicker = false
+//
+//    @State private var savedTrips: [Trip] = [] // You can later persist this
+//
+//    var body: some View {
+//        VStack(spacing: 0) {
+//            HeaderView(title: "Add Trips",
+//                       leading: {
+//                           Button(action: {
+//                               router.currentTab = .home
+//                           }) { Image(systemName: "chevron.left") }
+//                       },
+//                       trailing: {
+//                           Button(action: saveTrip) {
+//                               Image(systemName: "square.and.arrow.down.fill")
+//                               Text("Save")
+//                           }
+//                       })
+//
+//            ScrollView {
+//                VStack(alignment: .leading, spacing: 16) {
+//                    TextField("Trip Name", text: $tripName)
+//                        .padding()
+//                        .background(Color.white)
+//                        .cornerRadius(8)
+//
+//                    Text("Start Date").foregroundColor(.white)
+//                    DatePicker("Start", selection: $startDate, displayedComponents: [.date])
+//                        .datePickerStyle(.compact)
+//                        .labelsHidden()
+//
+//                    Text("End Date").foregroundColor(.white)
+//                    DatePicker("End", selection: $endDate, displayedComponents: [.date])
+//                        .datePickerStyle(.compact)
+//                        .labelsHidden()
+//
+//                    TextField("Budget (LKR)", text: $budgetText)
+//                        .keyboardType(.decimalPad)
+//                        .padding()
+//                        .background(Color.white)
+//                        .cornerRadius(8)
+//
+//                    Button(action: { showImagePicker = true }) {
+//                        if let image = selectedImage {
+//                            Image(uiImage: image)
+//                                .resizable()
+//                                .scaledToFit()
+//                                .frame(height: 150)
+//                                .cornerRadius(10)
+//                        } else {
+//                            HStack {
+//                                Image(systemName: "photo")
+//                                Text("Upload Image")
+//                            }
+//                            .padding()
+//                            .frame(maxWidth: .infinity)
+//                            .background(Color.white)
+//                            .cornerRadius(8)
+//                        }
+//                    }
+//                }
+//                .padding()
+//            }
+//            .background(Color(hex: "#383838"))
+//            .clipShape(RoundedCorner(radius: 25, corners: [.topLeft, .topRight]))
+//
+//            CustomTabBar()
+//        }
+//        .background(Color(hex: "#00485C"))
+//        .edgesIgnoringSafeArea(.bottom)
+//        .sheet(isPresented: $showImagePicker) {
+//            ImagePicker(selectedImage: $selectedImage)
+//        }
+//    }
+//
+//    func saveTrip() {
+//        guard !tripName.isEmpty, let budget = Double(budgetText) else {
+//            print("Validation failed")
+//            return
+//        }
+//
+//        let newTrip = Trip(
+//            name: tripName,
+//            startDate: startDate,
+//            endDate: endDate,
+//            imageData: selectedImage?.jpegData(compressionQuality: 0.8),
+//            budget: budget
+//        )
+//
+//        tripStore.trips.append(newTrip)
+//        print("Trip saved: \(newTrip.name)")
+//        
+//        router.currentTab = .trips
+//
+//        // Reset form
+//        tripName = ""
+//        budgetText = ""
+//        selectedImage = nil
+//    }
+//
+//
+//}
 
-    @State private var tripName = ""
-    @State private var startDate = Date()
-    @State private var endDate = Date()
-    @State private var budgetText = ""
-    @State private var selectedImage: UIImage?
-    @State private var showImagePicker = false
 
-    @State private var savedTrips: [Trip] = [] // You can later persist this
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HeaderView(title: "Add Trips",
-                       leading: {
-                           Button(action: {
-                               router.currentTab = .home
-                           }) { Image(systemName: "chevron.left") }
-                       },
-                       trailing: {
-                           Button(action: saveTrip) {
-                               Image(systemName: "square.and.arrow.down.fill")
-                               Text("Save")
-                           }
-                       })
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    TextField("Trip Name", text: $tripName)
-                        .padding()
-                        .background(Color.white)
-                        .cornerRadius(8)
-
-                    Text("Start Date").foregroundColor(.white)
-                    DatePicker("Start", selection: $startDate, displayedComponents: [.date])
-                        .datePickerStyle(.compact)
-                        .labelsHidden()
-
-                    Text("End Date").foregroundColor(.white)
-                    DatePicker("End", selection: $endDate, displayedComponents: [.date])
-                        .datePickerStyle(.compact)
-                        .labelsHidden()
-
-                    TextField("Budget (LKR)", text: $budgetText)
-                        .keyboardType(.decimalPad)
-                        .padding()
-                        .background(Color.white)
-                        .cornerRadius(8)
-
-                    Button(action: { showImagePicker = true }) {
-                        if let image = selectedImage {
-                            Image(uiImage: image)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(height: 150)
-                                .cornerRadius(10)
-                        } else {
-                            HStack {
-                                Image(systemName: "photo")
-                                Text("Upload Image")
-                            }
-                            .padding()
-                            .frame(maxWidth: .infinity)
-                            .background(Color.white)
-                            .cornerRadius(8)
-                        }
-                    }
-                }
-                .padding()
-            }
-            .background(Color(hex: "#383838"))
-            .clipShape(RoundedCorner(radius: 25, corners: [.topLeft, .topRight]))
-
-            CustomTabBar()
-        }
-        .background(Color(hex: "#00485C"))
-        .edgesIgnoringSafeArea(.bottom)
-        .sheet(isPresented: $showImagePicker) {
-            ImagePicker(selectedImage: $selectedImage)
-        }
-    }
-
-    func saveTrip() {
-        guard !tripName.isEmpty,
-              let budget = Double(budgetText) else {
-            print("Validation failed")
-            return
-        }
-
-        let newTrip = Trip(
-            name: tripName,
-            startDate: startDate,
-            endDate: endDate,
-            imageData: selectedImage?.jpegData(compressionQuality: 0.8),
-            budget: budget
-        )
-
-        savedTrips.append(newTrip)
-        print("Trip saved: \(newTrip.name)")
-
-        // Optional: clear form
-        tripName = ""
-        budgetText = ""
-        selectedImage = nil
-    }
-}
 
 
 struct MapPage: View {

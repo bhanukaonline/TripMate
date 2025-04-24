@@ -166,3 +166,41 @@ struct RoundedCorner: Shape {
     }
 }
 
+struct TripCardView: View {
+    var trip: Trip
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let data = trip.imageData, let uiImage = UIImage(data: data) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(height: 160)
+                    .clipped()
+                    .cornerRadius(10)
+            }
+
+            Text(trip.name)
+                .font(.title2)
+                .bold()
+                .foregroundColor(.white)
+
+            Text("\(formatted(trip.startDate)) - \(formatted(trip.endDate))")
+                .font(.subheadline)
+                .foregroundColor(.white)
+
+            Text("Budget: LKR \(String(format: "%.2f", trip.budget))")
+                .font(.subheadline)
+                .foregroundColor(.white)
+        }
+        .padding()
+        .background(Color(hex: "#222222"))
+        .cornerRadius(15)
+    }
+
+    private func formatted(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        return formatter.string(from: date)
+    }
+}

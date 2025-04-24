@@ -9,9 +9,12 @@ import SwiftUI
 
 @main
 struct TripMateApp: App {
+    @StateObject private var tripStore = TripStore()
+
     var body: some Scene {
         WindowGroup {
             MainView()
+                .environmentObject(tripStore)
         }
     }
 }
