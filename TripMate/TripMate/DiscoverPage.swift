@@ -1,24 +1,17 @@
 //
-//  ContentView.swift
+//  DiscoverPage.swift
 //  TripMate
 //
-//  Created by Bhanuka on 4/22/25.
+//  Created by Bhanuka on 4/24/25.
 //
-
 import SwiftUI
 
-
-
-class TripStore: ObservableObject {
-    @Published var trips: [Trip] = []
-}
-
-struct HomePage: View {
+struct DiscoverPage: View {
     @EnvironmentObject var router: TabRouter
 
     var body: some View {
         VStack(spacing: 0) {
-            HeaderView(title: "Welcome",
+            HeaderView(title: "Discover",
                        leading: {
                            Button(action: {
                                print("Menu tapped")
@@ -34,7 +27,7 @@ struct HomePage: View {
 
             VStack {
                 Spacer()
-                Text("Welcome to TripMate!")
+                Text("List of discover")
                     .padding()
                     .foregroundColor(.white)
                 Spacer()
@@ -48,30 +41,4 @@ struct HomePage: View {
         .background(Color(hex: "#00485C"))
         .edgesIgnoringSafeArea(.bottom)
     }
-}
-
-struct MainView: View {
-    @StateObject private var router = TabRouter()
-
-    var body: some View {
-        ZStack {
-            switch router.currentTab {
-            case .home:
-                HomePage()
-            case .trips:
-                TripsPage()
-            case .addtrip:
-                AddTripPage()
-            case .map:
-                MapPage()
-            case .discover:
-                DiscoverPage()
-            }
-        }
-        .environmentObject(router)
-    }
-}
-
-#Preview {
-    MainView()
 }

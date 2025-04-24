@@ -52,30 +52,6 @@ struct HeaderView<Leading: View, Trailing: View>: View {
 
 
 
-//struct CustomTabBar: View {
-//    @Binding var selectedIndex: Int
-//
-//    let icons = ["house", "briefcase", "plus.square", "map", "safari"]
-//
-//    var body: some View {
-//        HStack {
-//            ForEach(0..<icons.count, id: \.self) { index in
-//                Spacer()
-//                Button(action: {
-//                    selectedIndex = index
-//                }) {
-//                    Image(systemName: selectedIndex == index ? "\(icons[index]).fill" : icons[index])
-//                                            .font(.system(size: index == 2 ? 32 : 25)) // Bigger plus icon
-//                                            .foregroundColor(.white) // Keep same color, just change filled style
-//                }
-//                Spacer()
-//            }
-//        }
-//        .padding()
-//        .background(Color(Color(hex: "#383838")).shadow(radius: 5))
-//    }
-//}
-
 
 
 
@@ -203,4 +179,42 @@ struct TripCardView: View {
         formatter.dateStyle = .medium
         return formatter.string(from: date)
     }
+}
+
+struct ImagePicker: UIViewControllerRepresentable {
+    @Binding var selectedImage: UIImage?
+    @Environment(\.presentationMode) var presentationMode
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
+        let parent: ImagePicker
+        init(_ parent: ImagePicker) { self.parent = parent }
+
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
+            if let uiImage = info[.originalImage] as? UIImage {
+                parent.selectedImage = uiImage
+            }
+            parent.presentationMode.wrappedValue.dismiss()
+        }
+    }
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+}
+
+struct Trip: Identifiable, Codable {
+    let id = UUID()
+    var name: String
+    var startDate: Date
+    var endDate: Date
+    var imageData: Data?
+    var budget: Double
 }
