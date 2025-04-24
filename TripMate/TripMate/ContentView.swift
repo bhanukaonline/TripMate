@@ -9,9 +9,7 @@ import SwiftUI
 
 
 
-class TripStore: ObservableObject {
-    @Published var trips: [Trip] = []
-}
+
 
 struct HomePage: View {
     @EnvironmentObject var router: TabRouter
