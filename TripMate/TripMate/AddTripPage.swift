@@ -253,67 +253,62 @@ struct AddAccommodationPage: View {
     @State private var mapView = MKMapView()
 
     // A coordinator to handle map interactions
-    private let completer = MKLocalSearchCompleter()
+    @StateObject private var completerDelegate = SearchCompleterDelegate()
     
     var body: some View {
-        NavigationView {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    TextField("Name", text: $name)
-                        .padding().background(Color.white).cornerRadius(8)
+           NavigationView {
+               ScrollView {
+                   VStack(alignment: .leading, spacing: 16) {
+                       // Other fields...
+                       TextField("Name", text: $name)
+                           .padding().background(Color.white).cornerRadius(8)
 
-                    DatePicker("Check-In", selection: $checkIn)
-                        .datePickerStyle(.compact)
+                       DatePicker("Check-In", selection: $checkIn)
+                           .datePickerStyle(.compact)
 
-                    DatePicker("Check-Out", selection: $checkOut)
-                        .datePickerStyle(.compact)
-
-                    // Improved location search section
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Location").font(.headline)
-                        
-                        TextField("Search location", text: $searchQuery)
-                            .padding()
-                            .background(Color.white)
-                            .cornerRadius(8)
-                            .onChange(of: searchQuery) { newValue in
-                                if !newValue.isEmpty {
-                                    isSearching = true
-                                    completer.queryFragment = newValue
-                                } else {
-                                    isSearching = false
-                                    searchResults = []
-                                }
-                            }
-                        
-                        if isSearching && !searchResults.isEmpty {
-                            ScrollView {
-                                VStack(alignment: .leading, spacing: 0) {
-                                    ForEach(searchResults, id: \.self) { result in
-                                        Button(action: {
-                                            searchAndSelectPlacemark(result)
-                                            isSearching = false
-                                            searchQuery = result.title
-                                        }) {
-                                            VStack(alignment: .leading, spacing: 4) {
-                                                Text(result.title)
-                                                    .font(.headline)
-                                                    .foregroundColor(.primary)
-                                                Text(result.subtitle)
-                                                    .font(.subheadline)
-                                                    .foregroundColor(.gray)
-                                                Divider()
-                                            }
-                                            .padding(.vertical, 8)
-                                            .padding(.horizontal, 12)
-                                            .contentShape(Rectangle())
-                                        }
-                                    }
-                                }
-                                .background(Color.white)
-                                .cornerRadius(8)
-                            }
-                            .frame(height: min(CGFloat(searchResults.count) * 60, 180))
+                       DatePicker("Check-Out", selection: $checkOut)
+                           .datePickerStyle(.compact)
+                       // Improved location search section
+                       VStack(alignment: .leading, spacing: 8) {
+                           Text("Location").font(.headline)
+                           
+                           TextField("Search location", text: $searchQuery)
+                               .padding()
+                               .background(Color.white)
+                               .cornerRadius(8)
+                               .onChange(of: searchQuery) { newValue in
+                                   if !newValue.isEmpty {
+                                       isSearching = true
+                                       completerDelegate.completer.queryFragment = newValue
+                                   } else {
+                                       isSearching = false
+                                       searchResults = []
+                                   }
+                               }
+                           
+                           if isSearching && !searchResults.isEmpty {
+                               List {
+                                   ForEach(searchResults, id: \.self) { result in
+                                       Button(action: {
+                                           searchAndSelectPlacemark(result)
+                                           isSearching = false
+                                           searchQuery = result.title
+                                       }) {
+                                           VStack(alignment: .leading) {
+                                               Text(result.title)
+                                                   .font(.headline)
+                                               Text(result.subtitle)
+                                                   .font(.subheadline)
+                                                   .foregroundColor(.gray)
+                                           }
+                                       }
+                                       .padding(.vertical, 4)
+                                   }
+                               }
+                               .frame(height: min(CGFloat(searchResults.count) * 60, 180))
+                               .listStyle(PlainListStyle())
+                               .background(Color.white)
+                               .cornerRadius(8)
                         }
                         
                         // Location action buttons
@@ -378,21 +373,21 @@ struct AddAccommodationPage: View {
                 .padding()
             }
             .navigationTitle("Add Accommodation")
-            .onAppear {
-                // Setup completer for search results
-                completer.resultTypes = .pointOfInterest
-                completer.delegate = SearchCompleterDelegate(callback: { results in
-                    self.searchResults = results
-                })
-                
-                // Initialize with user's location if available
-                if let userLocation = locationManager.location?.coordinate {
-                    region = MKCoordinateRegion(
-                        center: userLocation,
-                        span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
-                    )
-                }
-            }
+                        .onAppear {
+                            // Set up completer for search results
+                            completerDelegate.completer.resultTypes = .pointOfInterest
+                            completerDelegate.onUpdate = { results in
+                                self.searchResults = results
+                            }
+                            
+                            // Initialize with user's location if available
+                            if let userLocation = locationManager.location?.coordinate {
+                                region = MKCoordinateRegion(
+                                    center: userLocation,
+                                    span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+                                )
+                            }
+                        }
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") { router.currentTab = .trips }
@@ -642,21 +637,27 @@ struct MapViewContainer: UIViewRepresentable {
 
 // MARK: - Search Completer Delegate
 
-class SearchCompleterDelegate: NSObject, MKLocalSearchCompleterDelegate {
-    var callback: ([MKLocalSearchCompletion]) -> Void
+class SearchCompleterDelegate: NSObject, ObservableObject, MKLocalSearchCompleterDelegate {
+    let completer = MKLocalSearchCompleter()
+    var onUpdate: ([MKLocalSearchCompletion]) -> Void = { _ in }
     
-    init(callback: @escaping ([MKLocalSearchCompletion]) -> Void) {
-        self.callback = callback
+    override init() {
         super.init()
+        completer.delegate = self
+        completer.resultTypes = [.address, .pointOfInterest]
     }
     
     func completerDidUpdateResults(_ completer: MKLocalSearchCompleter) {
-        callback(completer.results)
+        DispatchQueue.main.async {
+            self.onUpdate(completer.results)
+        }
     }
     
     func completer(_ completer: MKLocalSearchCompleter, didFailWithError error: Error) {
         print("Search completer error: \(error.localizedDescription)")
-        callback([])
+        DispatchQueue.main.async {
+            self.onUpdate([])
+        }
     }
 }
 
