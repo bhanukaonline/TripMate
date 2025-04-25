@@ -186,6 +186,11 @@ struct PINView: View {
 struct TripMateApp: App {
     @StateObject private var tripStore = TripStore()
     @StateObject private var authManager = AuthenticationManager()
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+       
+        @StateObject private var router = TabRouter()
+        @StateObject private var notificationManager = NotificationManager.shared
+        @StateObject private var calendarManager = CalendarManager.shared
     
     var body: some Scene {
         WindowGroup {
@@ -193,6 +198,20 @@ struct TripMateApp: App {
                 if authManager.isAuthenticated {
                     MainView()
                         .environmentObject(tripStore)
+                        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenTripDetails"))) { notification in
+                                        if let tripId = notification.userInfo?["tripId"] as? UUID {
+                                            // Set the selected trip ID
+                                            tripStore.selectedTripId = tripId
+                                            
+                                            // Navigate to trips tab first
+                                            router.currentTab = .trips
+                                            
+                                            // Then after a short delay, trigger trip details view
+                                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                                NotificationCenter.default.post(name: NSNotification.Name("OpenSelectedTripDetails"), object: nil)
+                                            }
+                                        }
+                                    }
                 } else {
                     AuthenticationView(authManager: authManager)
                 }

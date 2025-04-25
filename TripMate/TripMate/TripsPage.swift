@@ -335,6 +335,13 @@ struct TripDetailsPage: View {
                     }
                     .padding()
                 }
+                  TripCalendarIntegrationView(trip: trip)
+                      .padding(.horizontal)
+                      .padding(.top, 12)
+
+                  TripNotificationSettingsView(trip: trip)
+                      .padding(.horizontal)
+                      .padding(.top, 12)
             }
             .background(Color(hex: "#383838"))
             .navigationBarTitleDisplayMode(.inline)
@@ -396,6 +403,14 @@ struct TripDetailsPage: View {
                           trip = updatedTrip
                       }
                   }
+          .onAppear {
+              // Existing onAppear code...
+          }
+          .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("OpenSelectedTripDetails"))) { _ in
+              if trip.id == tripStore.selectedTripId {
+                  // Already showing the correct trip
+              }
+          }
         
     }
     private var transportView: some View {
