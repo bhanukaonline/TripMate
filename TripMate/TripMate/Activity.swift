@@ -1,23 +1,14 @@
+//
+//  Activity.swift
+//  TripMate
+//
+//  Created by Bhanuka on 4/25/25.
+//
+import SwiftUI
+import MapKit
 // 1. First, add the Activity model
 
-struct Activity: Identifiable, Codable {
-    var id = UUID()
-    var name: String
-    var dateTime: Date
-    var location: String
-    var coordinate: CodableCoordinate
-    var budget: Double
-    var notes: String
-    
-    init(name: String, dateTime: Date, location: String, coordinate: CodableCoordinate, budget: Double, notes: String = "") {
-        self.name = name
-        self.dateTime = dateTime
-        self.location = location
-        self.coordinate = coordinate
-        self.budget = budget
-        self.notes = notes
-    }
-}
+
 
 // 2. Update the Trip model to include activities
 // Add this to your Trip struct:

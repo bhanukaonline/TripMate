@@ -102,6 +102,22 @@ struct Accommodation: Identifiable, Codable, Equatable {
         lhs.id == rhs.id
     }
 }
+struct Transport: Identifiable, Codable, Equatable {
+    let id = UUID()
+    var mode: TransportMode
+    var dateTime: Date
+    var startLocation: String
+    var startCoordinate: CodableCoordinate
+    var endLocation: String
+    var endCoordinate: CodableCoordinate
+    var budget: Double
+    var notes: String
+    
+    static func == (lhs: Transport, rhs: Transport) -> Bool {
+        lhs.id == rhs.id
+    }
+
+}
 
 
 struct Trip: Identifiable, Codable, Equatable {
@@ -112,7 +128,8 @@ struct Trip: Identifiable, Codable, Equatable {
     var imageName: String?
     var budget: Double
     var accommodations: [Accommodation] = []
-    var transports: [Transport] = []  
+    var transports: [Transport] = []
+    var activities: [Activity] = []
     
     // Add this if you need custom equality comparison
     static func == (lhs: Trip, rhs: Trip) -> Bool {
@@ -120,6 +137,24 @@ struct Trip: Identifiable, Codable, Equatable {
     }
 }
 
+struct Activity: Identifiable, Codable {
+    var id = UUID()
+    var name: String
+    var dateTime: Date
+    var location: String
+    var coordinate: CodableCoordinate
+    var budget: Double
+    var notes: String
+    
+    init(name: String, dateTime: Date, location: String, coordinate: CodableCoordinate, budget: Double, notes: String = "") {
+        self.name = name
+        self.dateTime = dateTime
+        self.location = location
+        self.coordinate = coordinate
+        self.budget = budget
+        self.notes = notes
+    }
+}
 struct IdentifiablePlacemark: Identifiable {
     let id = UUID()
     let placemark: MKPlacemark

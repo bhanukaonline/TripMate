@@ -196,6 +196,7 @@ struct TripDetailsPage: View {
     @EnvironmentObject var tripStore: TripStore
     @EnvironmentObject var router: TabRouter
     @State private var showEditTrip = false
+    @State private var showAddActivity = false
     
     @State private var activeTab = 0
     @State private var showAddAccommodation = false
@@ -365,6 +366,17 @@ struct TripDetailsPage: View {
                                 .environmentObject(tripStore)
                                 .environmentObject(router)
                         }
+                .sheet(isPresented: $showAddActivity) {
+                    AddActivityPage()
+                        .environmentObject(tripStore)
+                        .environmentObject(router)
+                        .onDisappear {
+                            // Refresh the trip data after adding activity
+                            if let index = tripStore.trips.firstIndex(where: { $0.id == trip.id }) {
+                                trip = tripStore.trips[index]
+                            }
+                        }
+                }
               
         }
           .onChange(of: tripStore.trips) { _ in
@@ -463,13 +475,55 @@ struct TripDetailsPage: View {
     }
     
     // Activities Tab Content
-    private var activitiesView: some View {
-        EmptyStateView(
-            icon: "figure.walk",
-            title: "No Activities Yet",
-            message: "Plan your activities for this trip"
-        )
-    }
+     private var activitiesView: some View {
+         VStack(alignment: .leading, spacing: 16) {
+             HStack {
+                 Text("Activities")
+                     .font(.title3)
+                     .fontWeight(.bold)
+                     .foregroundColor(.white)
+    
+                 Spacer()
+    
+                 Button(action: {
+                     tripStore.selectedTripId = trip.id
+                     showAddActivity = true
+                 }) {
+                     Label("Add", systemImage: "plus")
+                         .font(.subheadline)
+                         .padding(.horizontal, 12)
+                         .padding(.vertical, 6)
+                         .background(Color(hex: "#00485C"))
+                         .cornerRadius(20)
+                         .foregroundColor(.white)
+                 }
+             }
+    
+             if trip.activities.isEmpty {
+                 EmptyStateView(
+                     icon: "figure.walk",
+                     title: "No Activities Yet",
+                     message: "Add your first activity by tapping the + button"
+                 )
+             } else {
+                 // Map showing all activities
+                 Map {
+                     ForEach(trip.activities) { activity in
+                         Marker(activity.name, coordinate: activity.coordinate.coordinate)
+                             .tint(.green)
+                     }
+                 }
+                 .frame(height: 200)
+                 .cornerRadius(15)
+                 .padding(.bottom, 10)
+    
+                 // List of activities
+                 ForEach(trip.activities) { activity in
+                     ActivityCard(activity: activity)
+                 }
+             }
+         }
+     }
     
     // Transport Tab Content
 //    private var transportView: some View {
@@ -786,23 +840,494 @@ struct EmptyStateView: View {
 
 
 enum TransportMode: String, CaseIterable, Codable {
-    case bus, train, taxi, airplane
+    case bus = "bus"
+    case train = "train"
+    case taxi = "taxi"
+    case airplane = "airplane"
 }
 
-struct Transport: Identifiable, Codable, Equatable {
-    let id = UUID()
-    var mode: TransportMode
-    var dateTime: Date
-    var startLocation: String
-    var endLocation: String
-    var budget: Double
-    var notes: String
+
+struct AddTransportPage: View {
+    @EnvironmentObject var tripStore: TripStore
+    @EnvironmentObject var router: TabRouter
+    @Environment(\.presentationMode) var presentationMode
+    @StateObject private var locationManager = LocationManager()
+    
+    @State private var mode: TransportMode = .bus
+    @State private var dateTime = Date()
+    @State private var budgetText = ""
+    @State private var notes = ""
+    
+    // Start location search
+    @State private var startSearchQuery = ""
+    @State private var startSearchResults: [MKLocalSearchCompletion] = []
+    @State private var startSelectedPlacemark: IdentifiablePlacemark?
+    @State private var isStartSearching = false
+    @State private var startRegion = MKCoordinateRegion(
+        center: CLLocationCoordinate2D(latitude: 6.9271, longitude: 79.8612),
+        span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+    )
+    
+    // End location search
+    @State private var endSearchQuery = ""
+    @State private var endSearchResults: [MKLocalSearchCompletion] = []
+    @State private var endSelectedPlacemark: IdentifiablePlacemark?
+    @State private var isEndSearching = false
+    @State private var endRegion = MKCoordinateRegion(
+        center: CLLocationCoordinate2D(latitude: 6.9271, longitude: 79.8612),
+        span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+    )
+    
+    // Completers
+    @StateObject private var startCompleterDelegate = SearchCompleterDelegate()
+    @StateObject private var endCompleterDelegate = SearchCompleterDelegate()
+    
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    // Transport mode
+                    VStack(alignment: .leading) {
+                                            Text("Transport Mode").font(.headline)
+                                            
+                                            // Make sure all transport modes are available
+                                            Picker("Mode", selection: $mode) {
+                                                ForEach(TransportMode.allCases, id: \.self) { mode in
+                                                    HStack {
+                                                        Image(systemName: iconForMode(mode))
+//                                                        Text(mode.rawValue.capitalized)
+                                                    }
+                                                    .tag(mode)
+                                                }
+                                            }
+                                            .pickerStyle(SegmentedPickerStyle())
+                                        }
+                                        .padding(.vertical, 8)
+                    
+                    // Date and time
+                    DatePicker("Date & Time", selection: $dateTime)
+                        .datePickerStyle(.compact)
+                        .padding(.vertical, 8)
+                    
+                    // START LOCATION
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Start Location").font(.headline)
+                        
+                        TextField("Search start location", text: $startSearchQuery)
+                            .padding()
+                            .background(Color.white)
+                            .cornerRadius(8)
+                            .onChange(of: startSearchQuery) { newValue in
+                                if !newValue.isEmpty {
+                                    isStartSearching = true
+                                    startCompleterDelegate.completer.queryFragment = newValue
+                                } else {
+                                    isStartSearching = false
+                                    startSearchResults = []
+                                }
+                            }
+                        
+                        if isStartSearching && !startSearchResults.isEmpty {
+                            List {
+                                ForEach(startSearchResults, id: \.self) { result in
+                                    Button(action: {
+                                        searchAndSelectStartPlacemark(result)
+                                        isStartSearching = false
+                                    }) {
+                                        VStack(alignment: .leading) {
+                                            Text(result.title)
+                                                .font(.headline)
+                                            Text(result.subtitle)
+                                                .font(.subheadline)
+                                                .foregroundColor(.gray)
+                                        }
+                                    }
+                                    .padding(.vertical, 4)
+                                }
+                            }
+                            .frame(height: min(CGFloat(startSearchResults.count) * 60, 180))
+                            .listStyle(PlainListStyle())
+                            .background(Color.white)
+                            .cornerRadius(8)
+                        }
+                        
+                        // Start location actions
+                        HStack {
+                            Button(action: useCurrentLocationForStart) {
+                                Label("Current Location", systemImage: "location.fill")
+                                    .padding(8)
+                                    .background(Color.blue.opacity(0.2))
+                                    .cornerRadius(8)
+                            }
+                            
+                            Spacer()
+                            
+                            if startSelectedPlacemark != nil {
+                                Button(action: {
+                                    startSelectedPlacemark = nil
+                                    startSearchQuery = ""
+                                }) {
+                                    Label("Clear", systemImage: "xmark.circle")
+                                        .padding(8)
+                                        .background(Color.red.opacity(0.2))
+                                        .cornerRadius(8)
+                                }
+                            }
+                        }
+                        
+                        // Start location map
+                        MapViewContainer(
+                            region: $startRegion,
+                            selectedPlacemark: $startSelectedPlacemark,
+                            searchQuery: $startSearchQuery
+                        )
+                        .frame(height: 150)
+                        .cornerRadius(8)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                        )
+                        
+                        if startSelectedPlacemark == nil {
+                            Text("Tap on map to select start location")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
+                    }
+                    .padding(.vertical, 8)
+                    
+                    // END LOCATION
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("End Location").font(.headline)
+                        
+                        TextField("Search end location", text: $endSearchQuery)
+                            .padding()
+                            .background(Color.white)
+                            .cornerRadius(8)
+                            .onChange(of: endSearchQuery) { newValue in
+                                if !newValue.isEmpty {
+                                    isEndSearching = true
+                                    endCompleterDelegate.completer.queryFragment = newValue
+                                } else {
+                                    isEndSearching = false
+                                    endSearchResults = []
+                                }
+                            }
+                        
+                        if isEndSearching && !endSearchResults.isEmpty {
+                            List {
+                                ForEach(endSearchResults, id: \.self) { result in
+                                    Button(action: {
+                                        searchAndSelectEndPlacemark(result)
+                                        isEndSearching = false
+                                    }) {
+                                        VStack(alignment: .leading) {
+                                            Text(result.title)
+                                                .font(.headline)
+                                            Text(result.subtitle)
+                                                .font(.subheadline)
+                                                .foregroundColor(.gray)
+                                        }
+                                    }
+                                    .padding(.vertical, 4)
+                                }
+                            }
+                            .frame(height: min(CGFloat(endSearchResults.count) * 60, 180))
+                            .listStyle(PlainListStyle())
+                            .background(Color.white)
+                            .cornerRadius(8)
+                        }
+                        
+                        // End location actions
+                        HStack {
+                            Button(action: useCurrentLocationForEnd) {
+                                Label("Current Location", systemImage: "location.fill")
+                                    .padding(8)
+                                    .background(Color.blue.opacity(0.2))
+                                    .cornerRadius(8)
+                            }
+                            
+                            Spacer()
+                            
+                            if endSelectedPlacemark != nil {
+                                Button(action: {
+                                    endSelectedPlacemark = nil
+                                    endSearchQuery = ""
+                                }) {
+                                    Label("Clear", systemImage: "xmark.circle")
+                                        .padding(8)
+                                        .background(Color.red.opacity(0.2))
+                                        .cornerRadius(8)
+                                }
+                            }
+                        }
+                        
+                        // End location map
+                        MapViewContainer(
+                            region: $endRegion,
+                            selectedPlacemark: $endSelectedPlacemark,
+                            searchQuery: $endSearchQuery
+                        )
+                        .frame(height: 150)
+                        .cornerRadius(8)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                        )
+                        
+                        if endSelectedPlacemark == nil {
+                            Text("Tap on map to select end location")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
+                    }
+                    .padding(.vertical, 8)
+                    
+                    // Budget
+                    TextField("Budget (LKR)", text: $budgetText)
+                        .keyboardType(.decimalPad)
+                        .padding().background(Color.white).cornerRadius(8)
+                    
+                    // Notes
+                    TextEditor(text: $notes)
+                        .frame(height: 100)
+                        .padding()
+                        .background(Color.white)
+                        .cornerRadius(8)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                        )
+                }
+                .padding()
+            }
+            .navigationTitle("Add Transport")
+            .onAppear {
+                // Configure completers
+                startCompleterDelegate.completer.resultTypes = [.address, .pointOfInterest]
+                startCompleterDelegate.onUpdate = { results in
+                    self.startSearchResults = results
+                }
+                
+                endCompleterDelegate.completer.resultTypes = [.address, .pointOfInterest]
+                endCompleterDelegate.onUpdate = { results in
+                    self.endSearchResults = results
+                }
+                
+                // Initialize with user's location if available
+                if let userLocation = locationManager.location?.coordinate {
+                    startRegion = MKCoordinateRegion(
+                        center: userLocation,
+                        span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+                    )
+                    endRegion = MKCoordinateRegion(
+                        center: userLocation,
+                        span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+                    )
+                }
+            }
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") { presentationMode.wrappedValue.dismiss() }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Save") { saveTransport() }
+                        .disabled(!isFormValid)
+                }
+            }
+        }
+    }
+    
+    // Form validation
+    private var isFormValid: Bool {
+        startSelectedPlacemark != nil && endSelectedPlacemark != nil && !budgetText.isEmpty
+    }
+    
+    // Helper for mode icons
+    private func iconForMode(_ mode: TransportMode) -> String {
+        switch mode {
+        case .bus: return "bus"
+        case .taxi: return "car.fill"
+        case .train: return "tram.fill"
+        case .airplane: return "airplane"
+        }
+    }
+    
+    // Use current location for start
+    private func useCurrentLocationForStart() {
+        locationManager.requestLocation()
+        
+        if let userLocation = locationManager.location?.coordinate {
+            let location = CLLocation(latitude: userLocation.latitude, longitude: userLocation.longitude)
+            let geocoder = CLGeocoder()
+            
+            geocoder.reverseGeocodeLocation(location) { placemarks, error in
+                if let placemark = placemarks?.first {
+                    let mkPlacemark = MKPlacemark(
+                        coordinate: userLocation,
+                        addressDictionary: placemark.addressDictionary as? [String: Any]
+                    )
+                    startSelectedPlacemark = IdentifiablePlacemark(placemark: mkPlacemark)
+                    
+                    // Update region
+                    startRegion = MKCoordinateRegion(
+                        center: userLocation,
+                        span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+                    )
+                    
+                    // Update search query
+                    let locationName = [
+                        placemark.name,
+                        placemark.thoroughfare,
+                        placemark.locality,
+                        placemark.administrativeArea
+                    ].compactMap { $0 }.joined(separator: ", ")
+                    
+                    startSearchQuery = locationName.isEmpty ?
+                        "Location at \(userLocation.latitude), \(userLocation.longitude)" : locationName
+                }
+            }
+        }
+    }
+    
+    // Use current location for end
+    private func useCurrentLocationForEnd() {
+        locationManager.requestLocation()
+        
+        if let userLocation = locationManager.location?.coordinate {
+            let location = CLLocation(latitude: userLocation.latitude, longitude: userLocation.longitude)
+            let geocoder = CLGeocoder()
+            
+            geocoder.reverseGeocodeLocation(location) { placemarks, error in
+                if let placemark = placemarks?.first {
+                    let mkPlacemark = MKPlacemark(
+                        coordinate: userLocation,
+                        addressDictionary: placemark.addressDictionary as? [String: Any]
+                    )
+                    endSelectedPlacemark = IdentifiablePlacemark(placemark: mkPlacemark)
+                    
+                    // Update region
+                    endRegion = MKCoordinateRegion(
+                        center: userLocation,
+                        span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+                    )
+                    
+                    // Update search query
+                    let locationName = [
+                        placemark.name,
+                        placemark.thoroughfare,
+                        placemark.locality,
+                        placemark.administrativeArea
+                    ].compactMap { $0 }.joined(separator: ", ")
+                    
+                    endSearchQuery = locationName.isEmpty ?
+                        "Location at \(userLocation.latitude), \(userLocation.longitude)" : locationName
+                }
+            }
+        }
+    }
+    
+    // Search for start placemark
+    private func searchAndSelectStartPlacemark(_ completion: MKLocalSearchCompletion) {
+        let request = MKLocalSearch.Request(completion: completion)
+        let search = MKLocalSearch(request: request)
+        
+        search.start { response, error in
+            if let error = error {
+                print("Location search error: \(error.localizedDescription)")
+                return
+            }
+            
+            guard let response = response, let mapItem = response.mapItems.first else {
+                print("No locations found")
+                return
+            }
+            
+            // Create placemark and update selection
+            let identifiable = IdentifiablePlacemark(placemark: mapItem.placemark)
+            startSelectedPlacemark = identifiable
+            startSearchQuery = completion.title
+            
+            // Update map view
+            startRegion = MKCoordinateRegion(
+                center: identifiable.coordinate,
+                span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+            )
+        }
+    }
+    
+    // Search for end placemark
+    private func searchAndSelectEndPlacemark(_ completion: MKLocalSearchCompletion) {
+        let request = MKLocalSearch.Request(completion: completion)
+        let search = MKLocalSearch(request: request)
+        
+        search.start { response, error in
+            if let error = error {
+                print("Location search error: \(error.localizedDescription)")
+                return
+            }
+            
+            guard let response = response, let mapItem = response.mapItems.first else {
+                print("No locations found")
+                return
+            }
+            
+            // Create placemark and update selection
+            let identifiable = IdentifiablePlacemark(placemark: mapItem.placemark)
+            endSelectedPlacemark = identifiable
+            endSearchQuery = completion.title
+            
+            // Update map view
+            endRegion = MKCoordinateRegion(
+                center: identifiable.coordinate,
+                span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+            )
+        }
+    }
+    
+    // Save transport to trip
+    private func saveTransport() {
+        guard let tripId = tripStore.selectedTripId else {
+            print("No trip selected")
+            return
+        }
+        
+        guard
+            startSelectedPlacemark != nil,
+            endSelectedPlacemark != nil,
+            let budget = Double(budgetText)
+        else {
+            print("Validation failed")
+            return
+        }
+        
+        let newTransport = Transport(
+            mode: mode,
+            dateTime: dateTime,
+            startLocation: startSearchQuery,
+            startCoordinate: CodableCoordinate(coordinate: startSelectedPlacemark!.coordinate),
+            endLocation: endSearchQuery,
+            endCoordinate: CodableCoordinate(coordinate: endSelectedPlacemark!.coordinate),
+            budget: budget,
+            notes: notes
+        )
+        
+        if let index = tripStore.trips.firstIndex(where: { $0.id == tripId }) {
+            tripStore.trips[index].transports.append(newTransport)
+            tripStore.saveTrips() // Persist the change
+        }
+        
+        presentationMode.wrappedValue.dismiss()
+    }
 }
 
 struct TransportCard: View {
     var transport: Transport
     @EnvironmentObject var tripStore: TripStore
     @State private var showingDeleteAlert = false
+    @State private var routePolyline: MKPolyline?
+    @State private var mapRegion: MKCoordinateRegion?
+    @State private var isLoadingRoute = true
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -838,6 +1363,32 @@ struct TransportCard: View {
                     Text("\(transport.startLocation) → \(transport.endLocation)")
                 }
                 
+                // Add map view to show the route
+                ZStack {
+                    if let routePolyline = routePolyline, let mapRegion = mapRegion {
+                        RouteMapView(polyline: routePolyline,
+                                    startCoordinate: transport.startCoordinate.coordinate,
+                                    endCoordinate: transport.endCoordinate.coordinate,
+                                    region: mapRegion)
+                            .frame(height: 150)
+                            .cornerRadius(10)
+                    }
+                    
+                    if isLoadingRoute {
+                        VStack {
+                            ProgressView()
+                            Text("Loading route...")
+                                .font(.caption)
+                                .padding(.top, 4)
+                        }
+                        .frame(height: 150)
+                        .frame(maxWidth: .infinity)
+                        .background(Color.black.opacity(0.1))
+                        .cornerRadius(10)
+                    }
+                }
+                .padding(.top, 8)
+                
                 if !transport.notes.isEmpty {
                     Text(transport.notes)
                         .font(.caption)
@@ -851,6 +1402,15 @@ struct TransportCard: View {
         .alert("Delete Transport", isPresented: $showingDeleteAlert) {
             Button("Delete", role: .destructive) { deleteTransport() }
             Button("Cancel", role: .cancel) {}
+        }
+        .onAppear {
+            // For airplanes, show straight line immediately
+            if transport.mode == .airplane {
+                createStraightLineRoute(from: transport.startCoordinate.coordinate, to: transport.endCoordinate.coordinate)
+                isLoadingRoute = false
+            } else {
+                calculateRoute()
+            }
         }
     }
     
@@ -880,7 +1440,6 @@ struct TransportCard: View {
     }
     
     private func deleteTransport() {
-        // Similar to accommodation deletion
         if let tripIndex = tripStore.trips.firstIndex(where: { $0.id == tripStore.selectedTripId }) {
             if let transportIndex = tripStore.trips[tripIndex].transports.firstIndex(where: { $0.id == transport.id }) {
                 tripStore.trips[tripIndex].transports.remove(at: transportIndex)
@@ -888,80 +1447,242 @@ struct TransportCard: View {
             }
         }
     }
-}
-
-struct AddTransportPage: View {
-    @EnvironmentObject var tripStore: TripStore
-    @EnvironmentObject var router: TabRouter
-    @Environment(\.presentationMode) var presentationMode
     
-    @State private var mode: TransportMode = .bus
-    @State private var dateTime = Date()
-    @State private var startLocation = ""
-    @State private var endLocation = ""
-    @State private var budgetText = ""
-    @State private var notes = ""
-    
-    var body: some View {
-        NavigationView {
-            Form {
-                Section(header: Text("Transport Details")) {
-                    Picker("Mode", selection: $mode) {
-                        ForEach(TransportMode.allCases, id: \.self) { mode in
-                            Text(mode.rawValue.capitalized).tag(mode)
-                        }
-                    }
-                    
-                    DatePicker("Date & Time", selection: $dateTime)
-                    
-                    TextField("Start Location", text: $startLocation)
-                    TextField("End Location", text: $endLocation)
-                }
+    private func calculateRoute() {
+        isLoadingRoute = true
+        
+        let startCoordinate = transport.startCoordinate.coordinate
+        let endCoordinate = transport.endCoordinate.coordinate
+        
+        // Create a directions request
+        let request = MKDirections.Request()
+        request.source = MKMapItem(placemark: MKPlacemark(coordinate: startCoordinate))
+        request.destination = MKMapItem(placemark: MKPlacemark(coordinate: endCoordinate))
+        
+        // Set transport type based on mode - make sure we get a road route
+        switch transport.mode {
+        case .bus:
+            request.transportType = .transit
+        case .train:
+            request.transportType = .transit
+        case .taxi:
+            request.transportType = .automobile
+        case .airplane:
+            // For airplane we now use straight line (handled in onAppear)
+            return
+        }
+        
+        let directions = MKDirections(request: request)
+        directions.calculate { response, error in
+            isLoadingRoute = false
+            
+            guard let route = response?.routes.first else {
+                print("Error calculating route: \(error?.localizedDescription ?? "Unknown error")")
                 
-                Section(header: Text("Budget")) {
-                    TextField("Budget (LKR)", text: $budgetText)
-                        .keyboardType(.decimalPad)
+                // Try again with automobile type as fallback for all transport types
+                if transport.mode != .taxi {
+                    retryWithAutomobileType()
+                } else {
+                    // If all else fails, try with any transport type
+                    retryWithAnyTransportType()
                 }
-                
-                
-                Section(header: Text("Notes")) {
-                    TextEditor(text: $notes)
-                        .frame(minHeight: 100)
-                }
+                return
             }
-            .navigationTitle("Add Transport")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { presentationMode.wrappedValue.dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { saveTransport() }
-                        .disabled(!isFormValid)
-                }
-            }
+            
+            // Successfully calculated route
+            self.routePolyline = route.polyline
+            
+            // Calculate region that encompasses the route
+            let rect = route.polyline.boundingMapRect
+            let region = MKCoordinateRegion(rect)
+            
+            // Add some padding to the region
+            let paddedRegion = MKCoordinateRegion(
+                center: region.center,
+                span: MKCoordinateSpan(
+                    latitudeDelta: region.span.latitudeDelta * 1.2,
+                    longitudeDelta: region.span.longitudeDelta * 1.2
+                )
+            )
+            
+            self.mapRegion = paddedRegion
         }
     }
     
-    private var isFormValid: Bool {
-        !startLocation.isEmpty && !endLocation.isEmpty && !budgetText.isEmpty
+    private func retryWithAutomobileType() {
+        let startCoordinate = transport.startCoordinate.coordinate
+        let endCoordinate = transport.endCoordinate.coordinate
+        
+        let request = MKDirections.Request()
+        request.source = MKMapItem(placemark: MKPlacemark(coordinate: startCoordinate))
+        request.destination = MKMapItem(placemark: MKPlacemark(coordinate: endCoordinate))
+        request.transportType = .automobile
+        
+        let directions = MKDirections(request: request)
+        directions.calculate { response, error in
+            guard let route = response?.routes.first else {
+                print("Retry with automobile failed: \(error?.localizedDescription ?? "Unknown error")")
+                retryWithAnyTransportType()
+                return
+            }
+            
+            self.routePolyline = route.polyline
+            let rect = route.polyline.boundingMapRect
+            let region = MKCoordinateRegion(rect)
+            
+            self.mapRegion = MKCoordinateRegion(
+                center: region.center,
+                span: MKCoordinateSpan(
+                    latitudeDelta: region.span.latitudeDelta * 1.2,
+                    longitudeDelta: region.span.longitudeDelta * 1.2
+                )
+            )
+        }
     }
     
-    private func saveTransport() {
-        guard let budget = Double(budgetText) else { return }
+    private func retryWithAnyTransportType() {
+        let startCoordinate = transport.startCoordinate.coordinate
+        let endCoordinate = transport.endCoordinate.coordinate
         
-        let newTransport = Transport(
-            mode: mode,
-            dateTime: dateTime,
-            startLocation: startLocation,
-            endLocation: endLocation,
-            budget: budget,
-            notes: notes
+        let request = MKDirections.Request()
+        request.source = MKMapItem(placemark: MKPlacemark(coordinate: startCoordinate))
+        request.destination = MKMapItem(placemark: MKPlacemark(coordinate: endCoordinate))
+        request.transportType = .any
+        
+        let directions = MKDirections(request: request)
+        directions.calculate { response, error in
+            guard let route = response?.routes.first else {
+                print("All route calculations failed")
+                // Fall back to straight line when all routing fails
+                createStraightLineRoute(from: startCoordinate, to: endCoordinate)
+                return
+            }
+            
+            self.routePolyline = route.polyline
+            let rect = route.polyline.boundingMapRect
+            let region = MKCoordinateRegion(rect)
+            
+            self.mapRegion = MKCoordinateRegion(
+                center: region.center,
+                span: MKCoordinateSpan(
+                    latitudeDelta: region.span.latitudeDelta * 1.2,
+                    longitudeDelta: region.span.longitudeDelta * 1.2
+                )
+            )
+        }
+    }
+    
+    private func createStraightLineRoute(from start: CLLocationCoordinate2D, to end: CLLocationCoordinate2D) {
+        // Create a straight line if route calculation fails or for airplane mode
+        let coordinates = [start, end]
+        self.routePolyline = MKPolyline(coordinates: coordinates, count: coordinates.count)
+        
+        // Calculate a region that encompasses both points
+        let minLat = min(start.latitude, end.latitude)
+        let maxLat = max(start.latitude, end.latitude)
+        let minLon = min(start.longitude, end.longitude)
+        let maxLon = max(start.longitude, end.longitude)
+        
+        let center = CLLocationCoordinate2D(
+            latitude: (minLat + maxLat) / 2,
+            longitude: (minLon + maxLon) / 2
         )
         
-        if let tripIndex = tripStore.trips.firstIndex(where: { $0.id == tripStore.selectedTripId }) {
-            tripStore.trips[tripIndex].transports.append(newTransport)
-            tripStore.saveTrips()
-            presentationMode.wrappedValue.dismiss()
+        let span = MKCoordinateSpan(
+            latitudeDelta: (maxLat - minLat) * 1.4,
+            longitudeDelta: (maxLon - minLon) * 1.4
+        )
+        
+        self.mapRegion = MKCoordinateRegion(center: center, span: span)
+    }
+}
+
+// The RouteMapView remains the same
+struct RouteMapView: UIViewRepresentable {
+    let polyline: MKPolyline
+    let startCoordinate: CLLocationCoordinate2D
+    let endCoordinate: CLLocationCoordinate2D
+    let region: MKCoordinateRegion
+    
+    func makeUIView(context: Context) -> MKMapView {
+        let mapView = MKMapView()
+        mapView.delegate = context.coordinator
+        mapView.setRegion(region, animated: true)
+        
+        // Add the route
+        mapView.addOverlay(polyline)
+        
+        // Add start and end annotations
+        let startAnnotation = MKPointAnnotation()
+        startAnnotation.coordinate = startCoordinate
+        startAnnotation.title = "Start"
+        
+        let endAnnotation = MKPointAnnotation()
+        endAnnotation.coordinate = endCoordinate
+        endAnnotation.title = "End"
+        
+        mapView.addAnnotations([startAnnotation, endAnnotation])
+        
+        return mapView
+    }
+    
+    func updateUIView(_ uiView: MKMapView, context: Context) {
+        // Clear existing overlays and annotations
+        uiView.removeOverlays(uiView.overlays)
+        uiView.removeAnnotations(uiView.annotations)
+        
+        // Add the route
+        uiView.addOverlay(polyline)
+        
+        // Add start and end annotations
+        let startAnnotation = MKPointAnnotation()
+        startAnnotation.coordinate = startCoordinate
+        startAnnotation.title = "Start"
+        
+        let endAnnotation = MKPointAnnotation()
+        endAnnotation.coordinate = endCoordinate
+        endAnnotation.title = "End"
+        
+        uiView.addAnnotations([startAnnotation, endAnnotation])
+        
+        // Update region
+        uiView.setRegion(region, animated: true)
+    }
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+    
+    class Coordinator: NSObject, MKMapViewDelegate {
+        func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
+            if let polyline = overlay as? MKPolyline {
+                let renderer = MKPolylineRenderer(polyline: polyline)
+                renderer.strokeColor = UIColor.systemBlue
+                renderer.lineWidth = 4
+                return renderer
+            }
+            return MKOverlayRenderer(overlay: overlay)
+        }
+        
+        func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+            let identifier = "Pin"
+            var annotationView = mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? MKMarkerAnnotationView
+            
+            if annotationView == nil {
+                annotationView = MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: identifier)
+                annotationView?.canShowCallout = true
+            } else {
+                annotationView?.annotation = annotation
+            }
+            
+            // Configure pin color based on start/end
+            if annotation.title == "Start" {
+                annotationView?.markerTintColor = .green
+            } else if annotation.title == "End" {
+                annotationView?.markerTintColor = .red
+            }
+            
+            return annotationView
         }
     }
 }
