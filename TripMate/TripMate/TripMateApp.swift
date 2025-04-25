@@ -2,7 +2,7 @@ import SwiftUI
 import LocalAuthentication
 
 class AuthenticationManager: ObservableObject {
-    @Published var isAuthenticated = false
+    @Published var isAuthenticated = true
     @Published var errorMessage: String?
     @Published var showError = false
     
