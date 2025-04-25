@@ -60,8 +60,8 @@ struct MainView: View {
                 TripsPage()
             case .addtrip:
                 AddTripPage()
-            case .map:
-                MapPage()
+//            case .map:
+//                MapPage()
             case .discover:
                 DiscoverPage()
             }

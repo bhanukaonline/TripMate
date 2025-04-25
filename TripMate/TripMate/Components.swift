@@ -8,7 +8,7 @@
 import SwiftUI
 
 enum Tab {
-    case home, trips, addtrip, map, discover
+    case home, trips, addtrip,  discover
 }
 
 class TabRouter: ObservableObject {
@@ -62,7 +62,7 @@ struct CustomTabBar: View {
         ("house", .home),
         ("briefcase", .trips),
         ("plus.square", .addtrip),
-        ("map", .map),
+//        ("map", .map),
         ("safari", .discover)
     ]
 
@@ -75,7 +75,7 @@ struct CustomTabBar: View {
                 }) {
                     Image(systemName: router.currentTab == icon.tab ? "\(icon.image).fill" : icon.image)
 //                        .font(.system(size: 24))
-                        .font(.system(size: icon.tab == .addtrip ? 32 : 24))
+                        .font(.system(size: icon.tab == .addtrip ? 25 : 25))
                         .foregroundColor(.white)
                 }
                 Spacer()
