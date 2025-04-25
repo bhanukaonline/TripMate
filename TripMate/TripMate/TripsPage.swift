@@ -11,12 +11,13 @@ import MapKit
 struct TripCardView: View {
     var trip: Trip
     var onTap: () -> Void
+    @EnvironmentObject var tripStore: TripStore // Add this
     
     var body: some View {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: 8) {
-                if let data = trip.imageData, let uiImage = UIImage(data: data) {
-                    Image(uiImage: uiImage)
+                if let imageName = trip.imageName, let image = tripStore.loadImageFromDocuments(imageName: imageName) {
+                    Image(uiImage: image)
                         .resizable()
                         .scaledToFill()
                         .frame(height: 160)
@@ -69,10 +70,12 @@ struct TripCardView: View {
 }
 
 struct TripsPage: View {
-    @EnvironmentObject var router: TabRouter
-    @EnvironmentObject var tripStore: TripStore
-    @State private var selectedTrip: Trip?
-    @State private var showTripDetails = false
+        @EnvironmentObject var router: TabRouter
+        @EnvironmentObject var tripStore: TripStore
+        @State private var selectedTrip: Trip?
+        @State private var showTripDetails = false
+        @State private var showDeleteConfirmation = false
+        @State private var tripToDelete: Trip?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -125,16 +128,23 @@ struct TripsPage: View {
                     .padding(.vertical, 50)
                 } else {
                     VStack(spacing: 16) {
-                        ForEach(tripStore.trips) { trip in
-                            TripCardView(trip: trip) {
-                                // Set the selected trip and show details
-                                selectedTrip = trip
-                                tripStore.selectedTripId = trip.id
-                                showTripDetails = true
-                            }
-                        }
-                    }
-                    .padding()
+                                            ForEach(tripStore.trips) { trip in
+                                                TripCardView(trip: trip) {
+                                                    selectedTrip = trip
+                                                    tripStore.selectedTripId = trip.id
+                                                    showTripDetails = true
+                                                }
+                                                .contextMenu {
+                                                    Button(role: .destructive) {
+                                                        tripToDelete = trip
+                                                        showDeleteConfirmation = true
+                                                    } label: {
+                                                        Label("Delete", systemImage: "trash")
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        .padding()
                 }
             }
             .background(Color(hex: "#383838"))
@@ -151,41 +161,67 @@ struct TripsPage: View {
                     .environmentObject(router)
             }
         }
+        .alert("Delete Trip", isPresented: $showDeleteConfirmation, presenting: tripToDelete) { trip in
+                    Button("Delete", role: .destructive) {
+                        deleteTrip(trip)
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: { trip in
+                    Text("Are you sure you want to delete \(trip.name)?")
+                }
+            }
+            
+            private func deleteTrip(_ trip: Trip) {
+                if let index = tripStore.trips.firstIndex(where: { $0.id == trip.id }) {
+                    // Delete associated image if it exists
+                    if let imageName = trip.imageName {
+                        let url = tripStore.getDocumentsDirectory().appendingPathComponent(imageName)
+                        try? FileManager.default.removeItem(at: url)
+                    }
+                    
+                    // Remove from trips array
+                    tripStore.trips.remove(at: index)
+                    
+                    // Save the updated trips
+                    tripStore.saveTrips()
+                }
+        
     }
 }
 
 // Trip Details Page
 struct TripDetailsPage: View {
-    var trip: Trip
+    @State var trip: Trip
     @Environment(\.presentationMode) var presentationMode
     @EnvironmentObject var tripStore: TripStore
     @EnvironmentObject var router: TabRouter
+    @State private var showEditTrip = false
     
     @State private var activeTab = 0
     @State private var showAddAccommodation = false
     
     var body: some View {
-        NavigationView {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    // Header Image
-                    ZStack(alignment: .bottomLeading) {
-                        if let data = trip.imageData, let uiImage = UIImage(data: data) {
-                            Image(uiImage: uiImage)
-                                .resizable()
-                                .scaledToFill()
-                                .frame(height: 220)
-                                .clipped()
-                        } else {
-                            Rectangle()
-                                .fill(Color(hex: "#00485C"))
-                                .frame(height: 220)
-                                .overlay(
-                                    Image(systemName: "photo")
-                                        .font(.system(size: 40))
-                                        .foregroundColor(.white.opacity(0.7))
-                                )
-                        }
+          NavigationView {
+              ScrollView {
+                  VStack(alignment: .leading, spacing: 0) {
+                      // Updated Header Image section
+                      ZStack(alignment: .bottomLeading) {
+                          if let imageName = trip.imageName, let image = tripStore.loadImageFromDocuments(imageName: imageName) {
+                              Image(uiImage: image)
+                                  .resizable()
+                                  .scaledToFill()
+                                  .frame(height: 220)
+                                  .clipped()
+                          } else {
+                              Rectangle()
+                                  .fill(Color(hex: "#00485C"))
+                                  .frame(height: 220)
+                                  .overlay(
+                                      Image(systemName: "photo")
+                                          .font(.system(size: 40))
+                                          .foregroundColor(.white.opacity(0.7))
+                                  )
+                          }
                         
                         // Trip name overlay
                         VStack(alignment: .leading, spacing: 4) {
@@ -290,35 +326,26 @@ struct TripDetailsPage: View {
             .background(Color(hex: "#383838"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button(action: {
-                        presentationMode.wrappedValue.dismiss()
-                    }) {
-                        Image(systemName: "xmark")
-                            .foregroundColor(.white)
-                            .padding(8)
-                            .background(Color.black.opacity(0.5))
-                            .clipShape(Circle())
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button(action: {
+                            presentationMode.wrappedValue.dismiss()
+                        }) {
+                            Image(systemName: "xmark")
+                        }
+                    }
+                    
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button(action: {
+                            showEditTrip = true
+                        }) {
+                            Image(systemName: "pencil")
+                        }
                     }
                 }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: {
-                        // Edit trip functionality could be added here
-                    }) {
-                        Image(systemName: "pencil")
-                            .foregroundColor(.white)
-                            .padding(8)
-                            .background(Color.black.opacity(0.5))
-                            .clipShape(Circle())
-                    }
+                .sheet(isPresented: $showEditTrip) {
+                    EditTripPage(trip: $trip)
+                        .environmentObject(tripStore)
                 }
-            }
-            .sheet(isPresented: $showAddAccommodation) {
-                AddAccommodationPage()
-                    .environmentObject(tripStore)
-                    .environmentObject(router)
-            }
         }
     }
     
@@ -403,6 +430,105 @@ struct TripDetailsPage: View {
     }
 }
 
+struct EditTripPage: View {
+    @Binding var trip: Trip
+    @EnvironmentObject var tripStore: TripStore
+    @Environment(\.presentationMode) var presentationMode
+    
+    @State private var tripName: String
+    @State private var startDate: Date
+    @State private var endDate: Date
+    @State private var budgetText: String
+    @State private var selectedImage: UIImage?
+    @State private var showImagePicker = false
+    
+    init(trip: Binding<Trip>) {
+        self._trip = trip
+        _tripName = State(initialValue: trip.wrappedValue.name)
+        _startDate = State(initialValue: trip.wrappedValue.startDate)
+        _endDate = State(initialValue: trip.wrappedValue.endDate)
+        _budgetText = State(initialValue: String(format: "%.2f", trip.wrappedValue.budget))
+    }
+    
+    var body: some View {
+        NavigationView {
+            Form {
+                Section(header: Text("Trip Information")) {
+                    TextField("Trip Name", text: $tripName)
+                    DatePicker("Start Date", selection: $startDate, displayedComponents: [.date])
+                    DatePicker("End Date", selection: $endDate, displayedComponents: [.date])
+                    TextField("Budget", text: $budgetText)
+                        .keyboardType(.decimalPad)
+                }
+                
+                Section(header: Text("Trip Image")) {
+                    Button(action: { showImagePicker = true }) {
+                        if let image = selectedImage {
+                            Image(uiImage: image)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(height: 200)
+                        } else if let imageName = trip.imageName,
+                                  let image = tripStore.loadImageFromDocuments(imageName: imageName) {
+                            Image(uiImage: image)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(height: 200)
+                        } else {
+                            Text("Select Image")
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Edit Trip")
+            .navigationBarItems(
+                leading: Button("Cancel") {
+                    presentationMode.wrappedValue.dismiss()
+                },
+                trailing: Button("Save") {
+                    saveChanges()
+                    presentationMode.wrappedValue.dismiss()
+                }
+            )
+            .sheet(isPresented: $showImagePicker) {
+                ImagePicker(selectedImage: $selectedImage)
+            }
+        }
+    }
+    
+    private func saveChanges() {
+        guard let budget = Double(budgetText) else { return }
+        
+        var imageName: String? = trip.imageName
+        
+        // Handle image changes
+        if let selectedImage = selectedImage {
+            // Delete old image if it exists
+            if let oldImageName = trip.imageName {
+                let url = tripStore.getDocumentsDirectory().appendingPathComponent(oldImageName)
+                try? FileManager.default.removeItem(at: url)
+            }
+            
+            // Save new image
+            imageName = UUID().uuidString + ".jpg"
+            tripStore.saveImageToDocuments(image: selectedImage, imageName: imageName!)
+        }
+        
+        // Update trip
+        trip.name = tripName
+        trip.startDate = startDate
+        trip.endDate = endDate
+        trip.budget = budget
+        trip.imageName = imageName
+        
+        // Update in trip store
+        if let index = tripStore.trips.firstIndex(where: { $0.id == trip.id }) {
+            tripStore.trips[index] = trip
+            tripStore.saveTrips()
+        }
+    }
+}
+
 // Trip Stat Card Component
 struct TripStatCard: View {
     var title: String
@@ -471,6 +597,7 @@ struct AccommodationCard: View {
                     Text("\(formatted(accommodation.checkIn)) - \(formatted(accommodation.checkOut))")
                         .font(.subheadline)
                         .foregroundColor(.white.opacity(0.7))
+                    
                 }
                 
                 Spacer()
@@ -510,6 +637,12 @@ struct AccommodationCard: View {
                     }
                 }
             }
+            Map {
+                            Marker(accommodation.name, coordinate: accommodation.coordinate.coordinate)
+                        }
+                        .frame(height: 120)
+                        .cornerRadius(10)
+                        .padding(.top, 8)
         }
         .padding()
         .background(Color(hex: "#222222"))

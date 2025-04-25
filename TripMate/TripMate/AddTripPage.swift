@@ -15,9 +15,64 @@ import CoreLocation
 
 class TripStore: ObservableObject {
     @Published var trips: [Trip] = []
-    @Published var selectedTripId: UUID? // ✅ for tracking selected trip
+    @Published var selectedTripId: UUID?
+    
+    init() {
+        loadTrips()
+    }
+    
+    // Save trips to JSON
+    func saveTrips() {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        do {
+            let data = try encoder.encode(trips)
+            let url = getDocumentsDirectory().appendingPathComponent("trips.json")
+            try data.write(to: url)
+        } catch {
+            print("Error saving trips: \(error)")
+        }
+    }
+    
+    // Load trips from JSON
+    func loadTrips() {
+        let url = getDocumentsDirectory().appendingPathComponent("trips.json")
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        do {
+            let data = try Data(contentsOf: url)
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            trips = try decoder.decode([Trip].self, from: data)
+        } catch {
+            print("Error loading trips: \(error)")
+        }
+    }
+    
+    // Helper to get documents directory
+    public func getDocumentsDirectory() -> URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+    }
+    
+    // Save image to documents directory
+    func saveImageToDocuments(image: UIImage, imageName: String) -> Bool {
+        guard let data = image.jpegData(compressionQuality: 0.8) else { return false }
+        let url = getDocumentsDirectory().appendingPathComponent(imageName)
+        do {
+            try data.write(to: url)
+            return true
+        } catch {
+            print("Error saving image: \(error)")
+            return false
+        }
+    }
+    
+    // Load image from documents directory
+    func loadImageFromDocuments(imageName: String) -> UIImage? {
+        let url = getDocumentsDirectory().appendingPathComponent(imageName)
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return UIImage(data: data)
+    }
 }
-
 
 struct CodableCoordinate: Codable {
     var latitude: Double
@@ -49,11 +104,10 @@ struct Trip: Identifiable, Codable {
     var name: String
     var startDate: Date
     var endDate: Date
-    var imageData: Data?
+    var imageName: String? // Changed from imageData
     var budget: Double
     var accommodations: [Accommodation] = []
 }
-
 
 struct IdentifiablePlacemark: Identifiable {
     let id = UUID()
@@ -199,24 +253,25 @@ struct AddTripPage: View {
             return
         }
 
+        var imageName: String? = nil
+        if let selectedImage = selectedImage {
+            imageName = UUID().uuidString + ".jpg"
+            tripStore.saveImageToDocuments(image: selectedImage, imageName: imageName!)
+        }
+
         let newTrip = Trip(
             name: tripName,
             startDate: startDate,
             endDate: endDate,
-            imageData: selectedImage?.jpegData(compressionQuality: 0.8),
+            imageName: imageName,
             budget: budget
         )
 
-       
         tripStore.trips.append(newTrip)
         tripStore.selectedTripId = newTrip.id
-
-        print("Trip saved: \(newTrip.name)")
-
-        // Navigate to trips page
+        tripStore.saveTrips() // Persist the trips
+        
         router.currentTab = .trips
-
-        // Optionally reset fields
         tripName = ""
         budgetText = ""
         selectedImage = nil
@@ -491,14 +546,11 @@ struct AddAccommodationPage: View {
         )
 
         if let index = tripStore.trips.firstIndex(where: { $0.id == tripId }) {
-            tripStore.trips[index].accommodations.append(newAccommodation)
-            print("Accommodation added to trip: \(tripStore.trips[index].name)")
-        } else {
-            print("Trip not found")
-        }
+                tripStore.trips[index].accommodations.append(newAccommodation)
+                tripStore.saveTrips() // Persist the change
+            }
 
-        // Go back to trip list
-        router.currentTab = .trips
+            router.currentTab = .trips
     }
 }
 
