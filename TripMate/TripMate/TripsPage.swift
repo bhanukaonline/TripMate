@@ -296,31 +296,41 @@ struct TripDetailsPage: View {
                         .cornerRadius(15)
                         
                         // Tab Selection
-                        HStack {
-                            TabButton(title: "Accommodations", isActive: activeTab == 0) {
+                        HStack(spacing: 0) {
+                            TabButton(systemImage: "clock", isActive: activeTab == 0) {
                                 activeTab = 0
                             }
                             
-                            TabButton(title: "Activities", isActive: activeTab == 1) {
+                            TabButton(systemImage: "house", isActive: activeTab == 1) {
                                 activeTab = 1
                             }
                             
-                            TabButton(title: "Transport", isActive: activeTab == 2) {
+                            TabButton(systemImage: "figure.walk", isActive: activeTab == 2) {
                                 activeTab = 2
                             }
+                            
+                            TabButton(systemImage: "bus", isActive: activeTab == 3) {
+                                activeTab = 3
+                            }
                         }
-                        .padding(.vertical, 10)
+                        .frame(height: 60)
+                        .background(Color(hex: "#003445").opacity(0.8))
+                        .cornerRadius(16)
+                        .padding(.horizontal)
+                        .shadow(color: .black.opacity(0.2), radius: 10, y: 5)
                         
                         // Tab Content
                         switch activeTab {
                         case 0:
-                            accommodationsView
+                            TripTimelineView(trip: trip)
                         case 1:
-                            activitiesView
+                            accommodationsView
                         case 2:
+                            activitiesView
+                        case 3:
                             transportView
                         default:
-                            accommodationsView
+                            TripTimelineView(trip: trip)
                         }
                     }
                     .padding()
@@ -394,6 +404,7 @@ struct TripDetailsPage: View {
                    Text("Transports")
                        .font(.title3)
                        .fontWeight(.bold)
+                       .foregroundColor(.white)
                    
                    Spacer()
                    
@@ -677,23 +688,36 @@ struct TripStatCard: View {
 
 // Tab Button Component
 struct TabButton: View {
-    var title: String
-    var isActive: Bool
-    var action: () -> Void
-    
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.subheadline)
-                .fontWeight(isActive ? .bold : .regular)
-                .padding(.vertical, 8)
-                .padding(.horizontal, 16)
-                .foregroundColor(isActive ? .white : .white.opacity(0.6))
-                .background(isActive ? Color(hex: "#00485C") : Color.clear)
-                .cornerRadius(20)
-        }
-        .frame(maxWidth: .infinity)
-    }
+    var systemImage: String
+       var isActive: Bool
+       var action: () -> Void
+       
+       var body: some View {
+           Button(action: action) {
+               VStack(spacing: 4) {
+                   Image(systemName: systemImage)
+                       .font(.title3)
+                       .symbolVariant(isActive ? .fill : .none)
+                       .scaleEffect(isActive ? 1.15 : 1.0)
+                   
+                   if isActive {
+                       Capsule()
+                           .fill(Color.white)
+                           .frame(width: 20, height: 3)
+                           .transition(.opacity.combined(with: .scale))
+                   }
+               }
+               .frame(maxWidth: .infinity)
+               .padding(.vertical, 12)
+               .foregroundColor(isActive ? .white : .white.opacity(0.7))
+               .background(
+                   isActive ? Color(hex: "#00485C").opacity(0.3) : Color.clear
+               )
+               .contentShape(Rectangle())
+           }
+           .buttonStyle(.plain)
+           .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isActive)
+       }
 }
 
 // Accommodation Card Component
@@ -1362,6 +1386,7 @@ struct TransportCard: View {
                 HStack {
                     Image(systemName: "arrow.right")
                     Text("\(transport.startLocation) → \(transport.endLocation)")
+                        .foregroundColor(.white)
                 }
                 
                 // Add map view to show the route
@@ -1685,5 +1710,474 @@ struct RouteMapView: UIViewRepresentable {
             
             return annotationView
         }
+    }
+}
+
+
+protocol TimelineItem: Identifiable {
+    var id: UUID { get }
+    var date: Date { get }
+    var endDate: Date? { get }
+    var title: String { get }
+    var subtitle: String { get }
+    var iconName: String { get }
+    var iconColor: String { get }
+    var detailsView: AnyView { get }
+}
+
+// Extension for our existing models to conform to TimelineItem
+extension Accommodation: TimelineItem {
+    var date: Date { self.checkIn }
+    var endDate: Date? { self.checkOut }
+    var title: String { self.name }
+    var subtitle: String { "Accommodation" }
+    var iconName: String { "bed.double.fill" }
+    var iconColor: String { "#FF9800" }
+    var detailsView: AnyView {
+        AnyView(
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Check-in: \(formatted(checkIn))")
+                Text("Check-out: \(formatted(checkOut))")
+                if budget > 0 {
+                    Text("Budget: LKR \(String(format: "%.2f", budget))")
+                }
+                if !notes.isEmpty {
+                    Text("Notes: \(notes)")
+                }
+                
+                Map {
+                    Marker(name, coordinate: coordinate.coordinate)
+                }
+                .frame(height: 120)
+                .cornerRadius(10)
+            }
+                .foregroundColor(.white)
+        )
+    }
+    
+    private func formatted(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+}
+
+extension Activity: TimelineItem {
+    var date: Date { self.dateTime }  // Change from startTime to datetime
+    var endDate: Date? { nil }        // Remove endTime since it doesn't exist
+    var title: String { self.name }
+    var subtitle: String { "Activity" }
+    var iconName: String { "figure.hiking" }
+    var iconColor: String { "#4CAF50" }
+    var detailsView: AnyView {
+        AnyView(
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Time: \(formatted(date))")  // Change from startTime to datetime
+                
+                if budget > 0 {
+                    Text("Budget: LKR \(String(format: "%.2f", budget))")
+                }
+                if !notes.isEmpty {
+                    Text("Notes: \(notes)")
+                }
+                
+                Map {
+                    Marker(name, coordinate: coordinate.coordinate)
+                }
+                .frame(height: 120)
+                .cornerRadius(10)
+            }
+                .foregroundColor(.white)
+        )
+    }
+    
+    private func formatted(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+}
+
+// For Transport extension, change dateTime to datetime
+extension Transport: TimelineItem {
+    var date: Date { self.dateTime }  // Change from dateTime to datetime
+    var endDate: Date? { nil }
+    var title: String { "\(startLocation) → \(endLocation)" }
+    var subtitle: String { mode.rawValue.capitalized }
+    var iconName: String {
+        switch mode {
+        case .bus: return "bus"
+        case .train: return "tram.fill"
+        case .taxi: return "car.fill"
+        case .airplane: return "airplane"
+        }
+    }
+    var iconColor: String {
+        switch mode {
+        case .bus: return "#2196F3"
+        case .train: return "#9C27B0"
+        case .taxi: return "#FFC107"
+        case .airplane: return "#03A9F4"
+        }
+    }
+    var detailsView: AnyView {
+        AnyView(
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Departure: \(formatted(date))")  // Change from dateTime to datetime
+                Text("Mode: \(mode.rawValue.capitalized)")
+                if budget > 0 {
+                    Text("Budget: LKR \(String(format: "%.2f", budget))")
+                }
+                if !notes.isEmpty {
+                    Text("Notes: \(notes)")
+                }
+                
+                // Simple map showing start and end points
+                RouteMapPreview(
+                    startCoordinate: startCoordinate.coordinate,
+                    endCoordinate: endCoordinate.coordinate
+                )
+                .frame(height: 120)
+                .cornerRadius(10)
+            }
+                .foregroundColor(.white)
+        )
+    }
+    
+    private func formatted(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+}
+
+// A simplified version of RouteMapView for the timeline
+struct RouteMapPreview: UIViewRepresentable {
+    let startCoordinate: CLLocationCoordinate2D
+    let endCoordinate: CLLocationCoordinate2D
+    
+    func makeUIView(context: Context) -> MKMapView {
+        let mapView = MKMapView()
+        mapView.delegate = context.coordinator
+        
+        // Calculate region to show both points
+        let region = regionThatFitsBothCoordinates()
+        mapView.setRegion(region, animated: false)
+        
+        // Add start and end annotations
+        let startAnnotation = MKPointAnnotation()
+        startAnnotation.coordinate = startCoordinate
+        startAnnotation.title = "Start"
+        
+        let endAnnotation = MKPointAnnotation()
+        endAnnotation.coordinate = endCoordinate
+        endAnnotation.title = "End"
+        
+        mapView.addAnnotations([startAnnotation, endAnnotation])
+        
+        // Add a simple line
+        let coordinates = [startCoordinate, endCoordinate]
+        let polyline = MKPolyline(coordinates: coordinates, count: coordinates.count)
+        mapView.addOverlay(polyline)
+        
+        return mapView
+    }
+    
+    func updateUIView(_ uiView: MKMapView, context: Context) {
+        // No updates needed for preview
+    }
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+    
+    private func regionThatFitsBothCoordinates() -> MKCoordinateRegion {
+        let minLat = min(startCoordinate.latitude, endCoordinate.latitude)
+        let maxLat = max(startCoordinate.latitude, endCoordinate.latitude)
+        let minLon = min(startCoordinate.longitude, endCoordinate.longitude)
+        let maxLon = max(startCoordinate.longitude, endCoordinate.longitude)
+        
+        let center = CLLocationCoordinate2D(
+            latitude: (minLat + maxLat) / 2,
+            longitude: (minLon + maxLon) / 2
+        )
+        
+        let span = MKCoordinateSpan(
+            latitudeDelta: (maxLat - minLat) * 1.4,
+            longitudeDelta: (maxLon - minLon) * 1.4
+        )
+        
+        return MKCoordinateRegion(center: center, span: span)
+    }
+    
+    class Coordinator: NSObject, MKMapViewDelegate {
+        func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
+            if let polyline = overlay as? MKPolyline {
+                let renderer = MKPolylineRenderer(polyline: polyline)
+                renderer.strokeColor = UIColor.systemBlue
+                renderer.lineWidth = 3
+                return renderer
+            }
+            return MKOverlayRenderer(overlay: overlay)
+        }
+    }
+}
+
+// Timeline Card Component
+struct TimelineItemCard: View {
+    var item: any TimelineItem
+    @State private var isExpanded = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header with basic info
+            Button(action: {
+                withAnimation {
+                    isExpanded.toggle()
+                }
+            }) {
+                HStack {
+                    // Timeline icon
+                    ZStack {
+                        Circle()
+                            .fill(Color(hex: item.iconColor).opacity(0.2))
+                            .frame(width: 40, height: 40)
+                        
+                        Image(systemName: item.iconName)
+                            .font(.system(size: 18))
+                            .foregroundColor(Color(hex: item.iconColor))
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(item.title)
+                            .font(.headline)
+                            .foregroundColor(.white)
+                        
+                        HStack {
+                            Text(item.subtitle)
+                                .font(.subheadline)
+                                .foregroundColor(.white.opacity(0.7))
+                            
+                            Spacer()
+                            
+                            Text(formattedTime(item.date))
+                                .font(.subheadline)
+                                .foregroundColor(.white.opacity(0.7))
+                        }
+                    }
+                    .padding(.leading, 8)
+                    
+                    Spacer()
+                    
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .foregroundColor(.white.opacity(0.6))
+                }
+                .padding()
+                .background(Color(hex: "#222222"))
+                .cornerRadius(isExpanded ? 12 : 12)
+            }
+            .buttonStyle(PlainButtonStyle())
+            
+            // Expanded details
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 12) {
+                    // Date spanning info if applicable
+                    if let endDate = item.endDate {
+                        HStack {
+                            VStack(alignment: .leading) {
+                                Text("Starts")
+                                    .font(.caption)
+                                    .foregroundColor(.white.opacity(0.6))
+                                Text(formattedFullDate(item.date))
+                                    .font(.subheadline)
+                                    .foregroundColor(.white)
+                            }
+                            
+                            Spacer()
+                            
+                            VStack(alignment: .trailing) {
+                                Text("Ends")
+                                    .font(.caption)
+                                    .foregroundColor(.white.opacity(0.6))
+                                Text(formattedFullDate(endDate))
+                                    .font(.subheadline)
+                                    .foregroundColor(.white)
+                            }
+                        }
+                        .padding(.horizontal)
+                        .padding(.top, 4)
+                    }
+                    
+                    // Item-specific details
+                    item.detailsView
+                        .padding(.horizontal)
+                }
+                .padding(.bottom, 16)
+                .background(Color(hex: "#2A2A2A"))
+                .cornerRadius(12)
+            }
+        }
+    }
+    
+    private func formattedTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+    
+    private func formattedFullDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+}
+
+// Day Section for the timeline
+struct DaySection: View {
+    var day: Int
+    var date: Date
+    var items: [any TimelineItem]
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            // Day header
+            HStack {
+                ZStack {
+                    Circle()
+                        .fill(Color(hex: "#00485C"))
+                        .frame(width: 40, height: 40)
+                    
+                    Text("\(day)")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                }
+                
+                VStack(alignment: .leading) {
+                    Text("Day \(day)")
+                        .font(.title3)
+                        .bold()
+                        .foregroundColor(.white)
+                    
+                    Text(formattedDate(date))
+                        .font(.subheadline)
+                        .foregroundColor(.white.opacity(0.7))
+                }
+                .padding(.leading, 8)
+                
+                Spacer()
+            }
+            .padding(.bottom, 8)
+            
+            // Day timeline
+            VStack(spacing: 16) {
+                ForEach(0..<items.count, id: \.self) { index in
+                    let item = items[index]
+                    
+                    TimelineItemCard(item: item)
+                    
+                    // Connector line if not the last item
+                    if index < items.count - 1 {
+                        VStack {
+                            Rectangle()
+                                .fill(Color.white.opacity(0.2))
+                                .frame(width: 2, height: 20)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.leading, 20)
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(Color(hex: "#333333"))
+        .cornerRadius(16)
+    }
+    
+    private func formattedDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE, MMMM d, yyyy"
+        return formatter.string(from: date)
+    }
+}
+
+
+struct TripTimelineView: View {
+    var trip: Trip
+    @State private var allItems: [any TimelineItem] = []
+    @State private var dayGroups: [Int: [Date: [any TimelineItem]]] = [:]
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if allItems.isEmpty {
+                EmptyStateView(
+                    icon: "calendar",
+                    title: "No Itinerary Items",
+                    message: "Add accommodations, activities, or transports to see your trip timeline"
+                )
+            } else {
+                ScrollView {
+                    VStack(spacing: 16) {
+                        ForEach(Array(dayGroups.keys.sorted()), id: \.self) { day in
+                            if let dateItems = dayGroups[day], let firstDate = dateItems.keys.sorted().first {
+                                DaySection(
+                                    day: day,
+                                    date: firstDate,
+                                    items: dateItems[firstDate]?.sorted(by: { $0.date < $1.date }) ?? []
+                                )
+                            }
+                        }
+                    }
+                    .padding(.bottom, 20)
+                }
+            }
+        }
+        .onAppear {
+            organizeTimelineItems()
+        }
+    }
+    
+    private func organizeTimelineItems() {
+        // Combine all items
+        var items: [any TimelineItem] = []
+        items.append(contentsOf: trip.accommodations)
+        items.append(contentsOf: trip.activities)
+        items.append(contentsOf: trip.transports)
+        
+        // Sort by date
+        items.sort { $0.date < $1.date }
+        
+        self.allItems = items
+        
+        // Organize by day
+        organizeByDay()
+    }
+    
+    private func organizeByDay() {
+        var groups: [Int: [Date: [any TimelineItem]]] = [:]
+        let calendar = Calendar.current
+        let startDate = calendar.startOfDay(for: trip.startDate)
+        
+        for item in allItems {
+            // Calculate the day number relative to trip start
+            let itemDate = calendar.startOfDay(for: item.date)
+            let components = calendar.dateComponents([.day], from: startDate, to: itemDate)
+            let dayNumber = (components.day ?? 0) + 1 // Day 1, Day 2, etc.
+            
+            // Add to groups
+            if groups[dayNumber] == nil {
+                groups[dayNumber] = [itemDate: [item]]
+            } else if groups[dayNumber]?[itemDate] == nil {
+                groups[dayNumber]?[itemDate] = [item]
+            } else {
+                groups[dayNumber]?[itemDate]?.append(item)
+            }
+        }
+        
+        self.dayGroups = groups
     }
 }

@@ -244,50 +244,50 @@ struct AddTripPage: View {
             }
 
             // ▶️ Floating Action Button + pop-up options
-            VStack {
-                Spacer()
-                HStack {
-                    Spacer()
-                    ZStack {
-                        // Option buttons
-                        if showOptions {
-                            VStack(spacing: 16) {
-                                Button(action: {
-                                    // TODO: activity
-                                }) {
-                                    Label("Activity", systemImage: "figure.walk")
-                                        .padding().background(Color.blue).cornerRadius(30).foregroundColor(.white)
-                                }
-                                Button(action: {
-                                    // TODO: transport
-                                }) {
-                                    Label("Transport", systemImage: "car.fill")
-                                        .padding().background(Color.blue).cornerRadius(30).foregroundColor(.white)
-                                }
-                                Button(action: {
-                                    showAddAccommodation = true
-                                }) {
-                                    Label("Accommodation", systemImage: "bed.double.fill")
-                                        .padding().background(Color.blue).cornerRadius(30).foregroundColor(.white)
-                                }
-                            }
-                            .transition(.move(edge: .trailing).combined(with: .opacity))
-                            .zIndex(1)
-                        }
-
-                        // Main FAB
-                        Button(action: {
-                            withAnimation { showOptions.toggle() }
-                        }) {
-                            Image(systemName: showOptions ? "xmark" : "plus")
-                                .font(.system(size: 24)).foregroundColor(.white)
-                                .padding().background(Color.red).clipShape(Circle())
-                                .shadow(radius: 5)
-                        }
-                    }
-                    .padding()
-                }
-            }
+//            VStack {
+//                Spacer()
+//                HStack {
+//                    Spacer()
+//                    ZStack {
+//                        // Option buttons
+//                        if showOptions {
+//                            VStack(spacing: 16) {
+//                                Button(action: {
+//                                    // TODO: activity
+//                                }) {
+//                                    Label("Activity", systemImage: "figure.walk")
+//                                        .padding().background(Color.blue).cornerRadius(30).foregroundColor(.white)
+//                                }
+//                                Button(action: {
+//                                    // TODO: transport
+//                                }) {
+//                                    Label("Transport", systemImage: "car.fill")
+//                                        .padding().background(Color.blue).cornerRadius(30).foregroundColor(.white)
+//                                }
+//                                Button(action: {
+//                                    showAddAccommodation = true
+//                                }) {
+//                                    Label("Accommodation", systemImage: "bed.double.fill")
+//                                        .padding().background(Color.blue).cornerRadius(30).foregroundColor(.white)
+//                                }
+//                            }
+//                            .transition(.move(edge: .trailing).combined(with: .opacity))
+//                            .zIndex(1)
+//                        }
+//
+//                        // Main FAB
+//                        Button(action: {
+//                            withAnimation { showOptions.toggle() }
+//                        }) {
+//                            Image(systemName: showOptions ? "xmark" : "plus")
+//                                .font(.system(size: 24)).foregroundColor(.white)
+//                                .padding().background(Color.red).clipShape(Circle())
+//                                .shadow(radius: 5)
+//                        }
+//                    }
+//                    .padding()
+//                }
+//            }
         }
         // ▶️ Present AddAccommodationPage
         .sheet(isPresented: $showAddAccommodation) {
