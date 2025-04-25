@@ -265,6 +265,7 @@ struct TripDetailsPage: View {
                             Text("Trip Summary")
                                 .font(.title2)
                                 .fontWeight(.bold)
+                                .foregroundColor(.white)
                             
                             // Trip Stats
                             HStack(spacing: 20) {

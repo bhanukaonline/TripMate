@@ -208,8 +208,12 @@ struct AddTripPage: View {
 
                         DatePicker("Start Date", selection: $startDate, displayedComponents: [.date])
                             .datePickerStyle(.compact)
+                            .foregroundColor(.white)
                         DatePicker("End Date",   selection: $endDate,   displayedComponents: [.date])
                             .datePickerStyle(.compact)
+                            .foregroundColor(.white)
+                        
+                        
 
                         TextField("Budget (LKR)", text: $budgetText)
                             .keyboardType(.decimalPad)
