@@ -88,7 +88,7 @@ struct CodableCoordinate: Codable {
     }
 }
 
-struct Accommodation: Identifiable, Codable {
+struct Accommodation: Identifiable, Codable, Equatable {
     let id = UUID()
     var name: String
     var checkIn: Date
@@ -96,17 +96,28 @@ struct Accommodation: Identifiable, Codable {
     var coordinate: CodableCoordinate
     var budget: Double
     var notes: String
+    
+    // Add this if you need custom equality comparison
+    static func == (lhs: Accommodation, rhs: Accommodation) -> Bool {
+        lhs.id == rhs.id
+    }
 }
 
 
-struct Trip: Identifiable, Codable {
+struct Trip: Identifiable, Codable, Equatable {
     let id = UUID()
     var name: String
     var startDate: Date
     var endDate: Date
-    var imageName: String? // Changed from imageData
+    var imageName: String?
     var budget: Double
     var accommodations: [Accommodation] = []
+    var transports: [Transport] = []  
+    
+    // Add this if you need custom equality comparison
+    static func == (lhs: Trip, rhs: Trip) -> Bool {
+        lhs.id == rhs.id
+    }
 }
 
 struct IdentifiablePlacemark: Identifiable {

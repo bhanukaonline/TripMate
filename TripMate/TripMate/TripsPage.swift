@@ -199,6 +199,7 @@ struct TripDetailsPage: View {
     
     @State private var activeTab = 0
     @State private var showAddAccommodation = false
+    @State private var showAddTransport = false
     
     var body: some View {
           NavigationView {
@@ -342,12 +343,73 @@ struct TripDetailsPage: View {
                         }
                     }
                 }
+              
                 .sheet(isPresented: $showEditTrip) {
                     EditTripPage(trip: $trip)
                         .environmentObject(tripStore)
                 }
+                .sheet(isPresented: $showAddAccommodation) {
+                    AddAccommodationPage()
+                        .environmentObject(tripStore)
+                        .environmentObject(router)
+                        // Reset the sheet state when dismissed
+                        .onDisappear {
+                            // Refresh the trip data after adding accommodation
+                            if let index = tripStore.trips.firstIndex(where: { $0.id == trip.id }) {
+                                trip = tripStore.trips[index]
+                            }
+                        }
+                }
+                .sheet(isPresented: $showAddTransport) {
+                            AddTransportPage()
+                                .environmentObject(tripStore)
+                                .environmentObject(router)
+                        }
+              
         }
+          .onChange(of: tripStore.trips) { _ in
+                      // Update the local trip state when the store changes
+                      if let updatedTrip = tripStore.trips.first(where: { $0.id == trip.id }) {
+                          trip = updatedTrip
+                      }
+                  }
+        
     }
+    private var transportView: some View {
+           VStack(alignment: .leading, spacing: 16) {
+               HStack {
+                   Text("Transports")
+                       .font(.title3)
+                       .fontWeight(.bold)
+                   
+                   Spacer()
+                   
+                   Button(action: {
+                       tripStore.selectedTripId = trip.id
+                       showAddTransport = true
+                   }) {
+                       Label("Add", systemImage: "plus")
+                           .font(.subheadline)
+                           .padding(.horizontal, 12)
+                           .padding(.vertical, 6)
+                           .background(Color(hex: "#00485C"))
+                           .cornerRadius(20)
+                   }
+               }
+               
+               if trip.transports.isEmpty {
+                   EmptyStateView(
+                       icon: "car",
+                       title: "No Transports",
+                       message: "Add your first transport by tapping the + button"
+                   )
+               } else {
+                   ForEach(trip.transports) { transport in
+                       TransportCard(transport: transport)
+                   }
+               }
+           }
+       }
     
     // Accommodations Tab Content
     private var accommodationsView: some View {
@@ -356,6 +418,7 @@ struct TripDetailsPage: View {
                 Text("Accommodations")
                     .font(.title3)
                     .fontWeight(.bold)
+                    .foregroundColor(.white)
                 
                 Spacer()
                 
@@ -409,13 +472,13 @@ struct TripDetailsPage: View {
     }
     
     // Transport Tab Content
-    private var transportView: some View {
-        EmptyStateView(
-            icon: "airplane",
-            title: "No Transport Info",
-            message: "Add transport details for your trip"
-        )
-    }
+//    private var transportView: some View {
+//        EmptyStateView(
+//            icon: "airplane",
+//            title: "No Transport Info",
+//            message: "Add transport details for your trip"
+//        )
+//    }
     
     // Helper function to format dates
     private func formatted(_ date: Date) -> String {
@@ -581,38 +644,43 @@ struct TabButton: View {
 // Accommodation Card Component
 struct AccommodationCard: View {
     var accommodation: Accommodation
+        @EnvironmentObject var tripStore: TripStore
+        @State private var showingDeleteAlert = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: "bed.double.fill")
-                    .foregroundColor(Color(hex: "#FF9800"))
-                    .font(.system(size: 24))
-                
-                VStack(alignment: .leading) {
-                    Text(accommodation.name)
-                        .font(.headline)
-                        .foregroundColor(.white)
+                HStack {
+                    Image(systemName: "bed.double.fill")
+                        .foregroundColor(Color(hex: "#FF9800"))
+                        .font(.system(size: 24))
                     
-                    Text("\(formatted(accommodation.checkIn)) - \(formatted(accommodation.checkOut))")
-                        .font(.subheadline)
-                        .foregroundColor(.white.opacity(0.7))
+                    VStack(alignment: .leading) {
+                        Text(accommodation.name)
+                            .font(.headline)
+                            .foregroundColor(.white)
+                        
+                        Text("\(formatted(accommodation.checkIn)) - \(formatted(accommodation.checkOut))")
+                            .font(.subheadline)
+                            .foregroundColor(.white.opacity(0.7))
+                    }
                     
+                    Spacer()
+                    
+                    // Delete button
+                    Button(action: {
+                        showingDeleteAlert = true
+                    }) {
+                        Image(systemName: "trash")
+                            .foregroundColor(.red)
+                            .padding(8)
+                            .background(Color.white.opacity(0.2))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(PlainButtonStyle())
                 }
                 
-                Spacer()
-                
-                Text("\(stayDuration(checkIn: accommodation.checkIn, checkOut: accommodation.checkOut)) nights")
-                    .font(.caption)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color(hex: "#00485C").opacity(0.5))
-                    .cornerRadius(12)
-                    .foregroundColor(.white)
-            }
-            
-            Divider()
-                .background(Color.white.opacity(0.2))
+                Divider()
+                    .background(Color.white.opacity(0.2))
             
             HStack {
                 VStack(alignment: .leading) {
@@ -645,10 +713,32 @@ struct AccommodationCard: View {
                         .padding(.top, 8)
         }
         .padding()
-        .background(Color(hex: "#222222"))
-        .cornerRadius(15)
+                .background(Color(hex: "#222222"))
+                .cornerRadius(15)
+                .alert("Delete Accommodation", isPresented: $showingDeleteAlert) {
+                    Button("Delete", role: .destructive) {
+                        deleteAccommodation()
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("Are you sure you want to delete \(accommodation.name)?")
+                }
     }
-    
+    private func deleteAccommodation() {
+            // Find the trip containing this accommodation
+            if let tripIndex = tripStore.trips.firstIndex(where: { trip in
+                trip.accommodations.contains(where: { $0.id == accommodation.id })
+            }) {
+                // Find the accommodation index in the trip's accommodations array
+                if let accommodationIndex = tripStore.trips[tripIndex].accommodations.firstIndex(where: { $0.id == accommodation.id }) {
+                    // Remove the accommodation
+                    tripStore.trips[tripIndex].accommodations.remove(at: accommodationIndex)
+                    
+                    // Save the changes
+                    tripStore.saveTrips()
+                }
+            }
+        }
     // Helper function to format dates
     private func formatted(_ date: Date) -> String {
         let formatter = DateFormatter()
@@ -695,3 +785,183 @@ struct EmptyStateView: View {
 }
 
 
+enum TransportMode: String, CaseIterable, Codable {
+    case bus, train, taxi, airplane
+}
+
+struct Transport: Identifiable, Codable, Equatable {
+    let id = UUID()
+    var mode: TransportMode
+    var dateTime: Date
+    var startLocation: String
+    var endLocation: String
+    var budget: Double
+    var notes: String
+}
+
+struct TransportCard: View {
+    var transport: Transport
+    @EnvironmentObject var tripStore: TripStore
+    @State private var showingDeleteAlert = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: transportIcon)
+                    .foregroundColor(transportColor)
+                    .font(.system(size: 24))
+                
+                VStack(alignment: .leading) {
+                    Text(transport.mode.rawValue.capitalized)
+                        .font(.headline)
+                        .foregroundColor(.white)
+                    
+                    Text("\(formattedDateTime) • \(transport.budget.formatted(.currency(code: "LKR")))")
+                        .font(.subheadline)
+                        .foregroundColor(.white.opacity(0.7))
+                }
+                
+                Spacer()
+                
+                Button(action: { showingDeleteAlert = true }) {
+                    Image(systemName: "trash")
+                        .foregroundColor(.red)
+                }
+            }
+            
+            Divider()
+                .background(Color.white.opacity(0.2))
+            
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Image(systemName: "arrow.right")
+                    Text("\(transport.startLocation) → \(transport.endLocation)")
+                }
+                
+                if !transport.notes.isEmpty {
+                    Text(transport.notes)
+                        .font(.caption)
+                        .padding(.top, 4)
+                }
+            }
+        }
+        .padding()
+        .background(Color(hex: "#222222"))
+        .cornerRadius(15)
+        .alert("Delete Transport", isPresented: $showingDeleteAlert) {
+            Button("Delete", role: .destructive) { deleteTransport() }
+            Button("Cancel", role: .cancel) {}
+        }
+    }
+    
+    private var transportIcon: String {
+        switch transport.mode {
+        case .bus: return "bus"
+        case .train: return "tram"
+        case .taxi: return "car"
+        case .airplane: return "airplane"
+        }
+    }
+    
+    private var transportColor: Color {
+        switch transport.mode {
+        case .bus: return .blue
+        case .train: return .green
+        case .taxi: return .yellow
+        case .airplane: return .purple
+        }
+    }
+    
+    private var formattedDateTime: String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        return formatter.string(from: transport.dateTime)
+    }
+    
+    private func deleteTransport() {
+        // Similar to accommodation deletion
+        if let tripIndex = tripStore.trips.firstIndex(where: { $0.id == tripStore.selectedTripId }) {
+            if let transportIndex = tripStore.trips[tripIndex].transports.firstIndex(where: { $0.id == transport.id }) {
+                tripStore.trips[tripIndex].transports.remove(at: transportIndex)
+                tripStore.saveTrips()
+            }
+        }
+    }
+}
+
+struct AddTransportPage: View {
+    @EnvironmentObject var tripStore: TripStore
+    @EnvironmentObject var router: TabRouter
+    @Environment(\.presentationMode) var presentationMode
+    
+    @State private var mode: TransportMode = .bus
+    @State private var dateTime = Date()
+    @State private var startLocation = ""
+    @State private var endLocation = ""
+    @State private var budgetText = ""
+    @State private var notes = ""
+    
+    var body: some View {
+        NavigationView {
+            Form {
+                Section(header: Text("Transport Details")) {
+                    Picker("Mode", selection: $mode) {
+                        ForEach(TransportMode.allCases, id: \.self) { mode in
+                            Text(mode.rawValue.capitalized).tag(mode)
+                        }
+                    }
+                    
+                    DatePicker("Date & Time", selection: $dateTime)
+                    
+                    TextField("Start Location", text: $startLocation)
+                    TextField("End Location", text: $endLocation)
+                }
+                
+                Section(header: Text("Budget")) {
+                    TextField("Budget (LKR)", text: $budgetText)
+                        .keyboardType(.decimalPad)
+                }
+                
+                
+                Section(header: Text("Notes")) {
+                    TextEditor(text: $notes)
+                        .frame(minHeight: 100)
+                }
+            }
+            .navigationTitle("Add Transport")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { presentationMode.wrappedValue.dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { saveTransport() }
+                        .disabled(!isFormValid)
+                }
+            }
+        }
+    }
+    
+    private var isFormValid: Bool {
+        !startLocation.isEmpty && !endLocation.isEmpty && !budgetText.isEmpty
+    }
+    
+    private func saveTransport() {
+        guard let budget = Double(budgetText) else { return }
+        
+        let newTransport = Transport(
+            mode: mode,
+            dateTime: dateTime,
+            startLocation: startLocation,
+            endLocation: endLocation,
+            budget: budget,
+            notes: notes
+        )
+        
+        if let tripIndex = tripStore.trips.firstIndex(where: { $0.id == tripStore.selectedTripId }) {
+            tripStore.trips[tripIndex].transports.append(newTransport)
+            tripStore.saveTrips()
+            presentationMode.wrappedValue.dismiss()
+        }
+    }
+}
